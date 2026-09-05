@@ -63,6 +63,22 @@ RECEIPT_PARSE_PROMPT: Final[str] = (
 VALID_CONDITIONS: Final[frozenset[str]] = frozenset({"new", "good", "fair", "poor"})
 
 #: Below this much OCR text, the image goes to the vision model instead.
+#: How much of the read text goes to the vision model. A photograph already
+#: costs a small model most of its context: moondream holds 2048 tokens and
+#: one picture is about 1700 of them. The text model reads the whole thing
+#: later, so the picture keeps its room here.
+VISION_TEXT_LIMIT: Final[int] = 400
+
+#: What one photograph costs a vision model, in tokens. It is a guess: the
+#: real number depends on the encoder. moondream turns a 378 px picture into
+#: about 1700, and the guess only has to be close enough to choose how many
+#: photographs fit.
+IMAGE_TOKEN_GUESS: Final[int] = 1800
+
+#: What to keep free for the answer. A JSON object for one item is about a
+#: hundred tokens, and a shelf full of them is more.
+ANSWER_TOKEN_RESERVE: Final[int] = 300
+
 MIN_OCR_TEXT_CHARS: Final[int] = 40
 
 DEFAULT_BASE_URL: Final[str] = "http://ollama:11434"
@@ -78,6 +94,15 @@ STATUS_TIMEOUT: Final[float] = 5.0
 # --------------------------------------------------------------------------
 # Data
 # --------------------------------------------------------------------------
+
+
+class ContextTooSmallError(UpstreamError):
+    """The model cannot hold the prompt and the picture at the same time.
+
+    A vision model turns one photograph into hundreds of tokens, and a small
+    model such as moondream holds 2048 of them in total. Ollama refuses the
+    call rather than cutting the picture in half.
+    """
 
 
 def _reason(body: str) -> str:
@@ -236,6 +261,8 @@ class AIService:
 
     def __init__(self, config: OllamaConfig | None = None) -> None:
         self.config = config or OllamaConfig.from_settings()
+        #: How much each model holds, asked once and kept.
+        self._contexts: dict[str, int] = {}
 
     # -- public API --------------------------------------------------------
 
@@ -398,11 +425,13 @@ class AIService:
                 ) from exc
             # Ollama says why in the body. Put it in the message, because the
             # job record and the log line show the message and nothing else.
-            raise UpstreamError(
+            message = (
                 f"Ollama answered with status {exc.response.status_code} "
-                f"for the model '{wanted_model}': {_reason(detail)}",
-                details={"body": detail},
-            ) from exc
+                f"for the model '{wanted_model}': {_reason(detail)}"
+            )
+            if "exceed_context_size" in detail:
+                raise ContextTooSmallError(message, details={"body": detail}) from exc
+            raise UpstreamError(message, details={"body": detail}) from exc
         except httpx.HTTPError as exc:
             raise AIUnavailableError(
                 f"Ollama at {config.base_url} is not reachable: {exc}"
@@ -411,6 +440,32 @@ class AIService:
         return str(data.get("response", ""))
 
     # -- internals ---------------------------------------------------------
+
+    async def _model_context(self, model: str) -> int:
+        """Return how many tokens a model holds, from Ollama.
+
+        Ollama refuses to load a model with more context than it was trained
+        for, so the number the application asks for is a ceiling and not a
+        promise. This is the real one.
+        """
+        if model in self._contexts:
+            return self._contexts[model]
+
+        held = self.config.num_ctx
+        try:
+            async with self._client(timeout=15) as client:
+                response = await client.post("/api/show", json={"model": model})
+                response.raise_for_status()
+                info = response.json().get("model_info") or {}
+            for key, value in info.items():
+                if key.endswith(".context_length") and isinstance(value, int):
+                    held = min(self.config.num_ctx, value)
+                    break
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.info("Ollama did not say what %s holds: %s", model, exc)
+
+        self._contexts[model] = held
+        return held
 
     async def _recognize_with(
         self,
@@ -424,15 +479,49 @@ class AIService:
         if not pictures:
             raise UpstreamError("The image is empty.")
 
-        if ocr_text and ocr_text.strip():
-            prompt += (
+        # What the model holds decides how many photographs go up and whether
+        # the text that OCR read fits beside them.
+        context = await self._model_context(self.config.model)
+        room_for_images = max(1, (context - ANSWER_TOKEN_RESERVE) // IMAGE_TOKEN_GUESS)
+        if len(pictures) > room_for_images:
+            logger.info(
+                "The model holds %d tokens, so %d of the %d photographs go up.",
+                context,
+                room_for_images,
+                len(pictures),
+            )
+            pictures = pictures[:room_for_images]
+            if room_for_images == 1:
+                prompt = prompt.replace(MULTI_ANGLE_SUFFIX, "")
+
+        room_for_text = (
+            context - ANSWER_TOKEN_RESERVE - IMAGE_TOKEN_GUESS * len(pictures)
+        )
+        full_prompt = prompt
+        if ocr_text and ocr_text.strip() and room_for_text > 150:
+            # Three characters to the token is a careful guess.
+            limit = min(VISION_TEXT_LIMIT, room_for_text * 3)
+            full_prompt += (
                 f"{TEXT_DETAIL_SUFFIX}\n\nThe text read from the photographs "
-                f"follows.\n\n{ocr_text.strip()[:4000]}"
+                f"follows.\n\n{ocr_text.strip()[:limit]}"
             )
 
         loop = asyncio.get_running_loop()
         started = loop.time()
-        response = await self.generate(prompt, images=pictures)
+        try:
+            response = await self.generate(full_prompt, images=pictures)
+        except ContextTooSmallError:
+            # One photograph alone costs a small vision model most of what it
+            # holds. Drop the read text and the other photographs, and ask
+            # again with the bare prompt: half an answer beats none.
+            if len(pictures) == 1 and full_prompt == prompt:
+                raise
+            logger.info(
+                "The model could not hold %d photographs and the read text. "
+                "Asking again with one photograph and the plain prompt.",
+                len(pictures),
+            )
+            response = await self.generate(prompt, images=pictures[:1])
         duration_ms = int((loop.time() - started) * 1000)
 
         payload = extract_json_payload(response)

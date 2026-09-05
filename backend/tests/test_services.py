@@ -100,6 +100,8 @@ async def test_recognize_reads_the_model_answer() -> None:
     from app.services.ai_service import AIService, OllamaConfig
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(32768)
         assert request.url.path == "/api/generate"
         body = request.read().decode()
         assert "home inventory assistant" in body
@@ -420,12 +422,19 @@ async def test_the_text_of_several_photographs_is_labelled() -> None:
     assert "Photograph 2" not in text
 
 
+def _holds(tokens: int) -> httpx.Response:
+    """The answer of POST /api/show: how many tokens the model holds."""
+    return httpx.Response(200, json={"model_info": {"phi2.context_length": tokens}})
+
+
 async def test_recognize_sends_every_photograph_and_the_read_text() -> None:
     from app.services.ai_service import AIService, OllamaConfig
 
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(32768)
         body = json.loads(request.read())
         seen["images"] = len(body["images"])
         seen["prompt"] = body["prompt"]
@@ -463,12 +472,98 @@ async def test_recognize_sends_every_photograph_and_the_read_text() -> None:
     assert suggestion.to_item_payload()["serial_number"] == "4821994"
 
 
+async def test_a_small_context_gets_one_photograph_and_the_plain_prompt() -> None:
+    """A model that cannot hold it all still answers.
+
+    moondream holds 2048 tokens and one photograph costs about 1700 of them,
+    so two photographs and the read text can never fit. The second call drops
+    both instead of failing.
+    """
+    from app.services.ai_service import AIService, OllamaConfig
+
+    calls: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(2048)
+        calls.append(json.loads(request.read()))
+        return httpx.Response(200, json={"response": '[{"name": "Mower"}]'})
+
+    service = AIService(OllamaConfig(base_url="http://ollama.test"))
+    transport = httpx.MockTransport(handler)
+    service._client = lambda **_: httpx.AsyncClient(  # type: ignore[method-assign]
+        transport=transport, base_url="http://ollama.test"
+    )
+
+    result = await service.recognize([b"front", b"plate"], ocr_text="HRU19")
+
+    # One call, already cut to fit: one photograph, and no read text beside it.
+    assert len(calls) == 1
+    assert len(calls[0]["images"]) == 1  # type: ignore[arg-type]
+    assert "HRU19" not in str(calls[0]["prompt"])
+    assert "same one item" not in str(calls[0]["prompt"])
+    assert result.suggestions[0].name == "Mower"
+
+
+async def test_a_small_context_with_nothing_left_to_drop_reports_it() -> None:
+    from app.services.ai_service import AIService, ContextTooSmallError, OllamaConfig
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(2048)
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "message": "request (2312 tokens) exceeds the available "
+                    "context size (2048 tokens)",
+                    "type": "exceed_context_size_error",
+                }
+            },
+        )
+
+    service = AIService(OllamaConfig(base_url="http://ollama.test"))
+    transport = httpx.MockTransport(handler)
+    service._client = lambda **_: httpx.AsyncClient(  # type: ignore[method-assign]
+        transport=transport, base_url="http://ollama.test"
+    )
+
+    with pytest.raises(ContextTooSmallError) as caught:
+        await service.recognize([b"front"])
+    assert "exceeds the available context size" in str(caught.value)
+
+
+async def test_the_read_text_stays_short_for_the_vision_model() -> None:
+    from app.services.ai_service import VISION_TEXT_LIMIT, AIService, OllamaConfig
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(32768)
+        seen["prompt"] = json.loads(request.read())["prompt"]
+        return httpx.Response(200, json={"response": '[{"name": "Drill"}]'})
+
+    service = AIService(OllamaConfig(base_url="http://ollama.test"))
+    transport = httpx.MockTransport(handler)
+    service._client = lambda **_: httpx.AsyncClient(  # type: ignore[method-assign]
+        transport=transport, base_url="http://ollama.test"
+    )
+
+    await service.recognize([b"front"], ocr_text="x" * 5000)
+    prompt = seen["prompt"]
+    assert "x" * VISION_TEXT_LIMIT in prompt
+    assert "x" * (VISION_TEXT_LIMIT + 1) not in prompt
+
+
 async def test_one_photograph_does_not_get_the_multi_angle_line() -> None:
     from app.services.ai_service import AIService, OllamaConfig
 
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/show":
+            return _holds(32768)
         seen["prompt"] = json.loads(request.read())["prompt"]
         return httpx.Response(200, json={"response": "[]"})
 
