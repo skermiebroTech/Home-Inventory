@@ -125,6 +125,12 @@ jobs:
         working-directory: mobile
         run: npm run typecheck
 
+      # The bundle proves that every import resolves. A missing native
+      # dependency never shows in the type check.
+      - name: Bundle
+        working-directory: mobile
+        run: npx expo export --platform ios --output-dir /tmp/expo-bundle
+
   contract:
     name: The OpenAPI file is current
     runs-on: ubuntu-latest

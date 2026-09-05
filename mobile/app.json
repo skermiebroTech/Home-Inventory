@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.homestock.app",
@@ -26,7 +28,11 @@
       "adaptiveIcon": {
         "backgroundColor": "#0f172a"
       },
-      "permissions": ["CAMERA", "NFC", "VIBRATE"]
+      "permissions": [
+        "CAMERA",
+        "NFC",
+        "VIBRATE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -47,7 +53,9 @@
           "color": "#2563eb"
         }
       ],
-      "react-native-nfc-manager"
+      "react-native-nfc-manager",
+      "expo-asset",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
