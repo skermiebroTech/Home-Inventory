@@ -12,7 +12,20 @@ import { useCallback, useState } from 'react'
 import { Alert, ScrollView, View } from 'react-native'
 
 import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
-import { MODELS, download, remove, statusOf, type LocalModel } from '@/ai/local'
+import {
+  DownloadCancelled,
+  MODELS,
+  cancel,
+  download,
+  remove,
+  statusOf,
+  totalBytes,
+  unfinished,
+  type DownloadProgress,
+  type LocalModel,
+} from '@/ai/local'
+import ProgressBar from '@/components/ProgressBar'
+import { formatBytes, formatWait } from '@/lib/format'
 import { useSettingsStore } from '@/store/settings'
 import { spacing, useTheme } from '@/theme'
 
@@ -20,24 +33,27 @@ export default function LocalAi() {
   const theme = useTheme()
   const settings = useSettingsStore()
   const [ready, setReady] = useState<Record<string, boolean>>({})
+  const [onDisk, setOnDisk] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
-  const [progress, setProgress] = useState(0)
+  const [progress, setProgress] = useState<DownloadProgress | null>(null)
+  const [paused, setPaused] = useState<LocalModel | null>(null)
 
   const load = useCallback(async () => {
     const state: Record<string, boolean> = {}
-    for (const model of MODELS) state[model.id] = (await statusOf(model)).ready
+    const sizes: Record<string, number> = {}
+    for (const model of MODELS) {
+      const status = await statusOf(model)
+      state[model.id] = status.ready
+      sizes[model.id] = status.bytes
+    }
     setReady(state)
+    setOnDisk(sizes)
+    setPaused(await unfinished())
   }, [])
-
-  useFocusEffect(
-    useCallback(() => {
-      void load()
-    }, [load]),
-  )
 
   const fetchModel = async (model: LocalModel): Promise<void> => {
     setBusy(model.id)
-    setProgress(0)
+    setProgress(null)
     try {
       await download(model, setProgress)
       settings.setLocalModel(model.id)
@@ -47,20 +63,47 @@ export default function LocalAi() {
         'The camera uses it now. It works with no signal.',
       )
     } catch (error) {
-      Alert.alert(
-        'The download stopped',
-        error instanceof Error ? error.message : 'Try again on WiFi.',
-      )
+      if (!(error instanceof DownloadCancelled)) {
+        Alert.alert(
+          'The download stopped',
+          error instanceof Error ? error.message : 'Try again on WiFi.',
+        )
+      }
+      await load()
     } finally {
       setBusy(null)
+      setProgress(null)
     }
   }
 
+  const stop = async (): Promise<void> => {
+    await cancel()
+    await load()
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        await load()
+        // Android may stop the application during a download of two
+        // gigabytes. Opening this screen carries on from the bytes that
+        // reached the phone, rather than waiting to be asked.
+        const pending = await unfinished()
+        if (pending && !busy) void fetchModel(pending)
+      })()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [load]),
+  )
+
+
   const dropModel = (model: LocalModel): void => {
-    Alert.alert('Remove the model?', `This gives ${model.size} back.`, [
+    Alert.alert(
+      'Delete the model?',
+      `This gives ${formatBytes(totalBytes(model))} back.`,
+      [
       { text: 'Keep', style: 'cancel' },
       {
-        text: 'Remove',
+        text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           await remove(model)
@@ -93,8 +136,14 @@ export default function LocalAi() {
                 <View style={{ flex: 1 }}>
                   <Body weight="600">{model.name}</Body>
                   <Caption>
-                    {model.size} · {model.note}
+                    {formatBytes(totalBytes(model))} · {model.note}
                   </Caption>
+                  {!ready[model.id] && (onDisk[model.id] ?? 0) > 0 ? (
+                    <Caption tone={theme.warn}>
+                      {formatBytes(onDisk[model.id] ?? 0)} is already on the
+                      phone.
+                    </Caption>
+                  ) : null}
                 </View>
                 {chosen && here ? (
                   <Ionicons name="checkmark-circle" size={22} color={theme.accent} />
@@ -102,26 +151,41 @@ export default function LocalAi() {
               </View>
 
               {working ? (
-                <View style={{ marginTop: spacing.md }}>
-                  <View
-                    style={{
-                      height: 6,
-                      borderRadius: 999,
-                      backgroundColor: theme.border,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <View
-                      style={{
-                        height: 6,
-                        width: `${Math.round(progress * 100)}%`,
-                        backgroundColor: theme.accent,
-                      }}
-                    />
+                <View style={{ marginTop: spacing.md, gap: 6 }}>
+                  <ProgressBar fraction={progress?.fraction ?? 0} />
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Caption>
+                      {formatBytes(progress?.written ?? 0)} of{' '}
+                      {formatBytes(progress?.total ?? totalBytes(model))}
+                    </Caption>
+                    <View style={{ flex: 1 }} />
+                    <Caption>
+                      {Math.round((progress?.fraction ?? 0) * 100)}%
+                    </Caption>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Caption>
+                      {progress?.perSecond
+                        ? `${formatBytes(progress.perSecond)}/s`
+                        : 'Starting'}
+                    </Caption>
+                    <View style={{ flex: 1 }} />
+                    <Caption>
+                      {progress?.secondsLeft !== undefined
+                        ? `${formatWait(progress.secondsLeft)} left`
+                        : ''}
+                    </Caption>
                   </View>
                   <Caption>
-                    {Math.round(progress * 100)}% · keep this screen open
+                    It carries on where it stopped if the application closes.
                   </Caption>
+                  <Button
+                    title="Cancel"
+                    variant="secondary"
+                    icon="close"
+                    onPress={() => void stop()}
+                    style={{ marginTop: 4 }}
+                  />
                 </View>
               ) : (
                 <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
@@ -136,7 +200,7 @@ export default function LocalAi() {
                         />
                       ) : null}
                       <Button
-                        title="Remove"
+                        title={`Delete ${formatBytes(onDisk[model.id] ?? 0)}`}
                         variant="secondary"
                         icon="trash"
                         onPress={() => dropModel(model)}
@@ -144,13 +208,30 @@ export default function LocalAi() {
                       />
                     </>
                   ) : (
-                    <Button
-                      title={`Download ${model.size}`}
-                      icon="cloud-download"
-                      onPress={() => void fetchModel(model)}
-                      style={{ flex: 1 }}
-                      disabled={busy !== null}
-                    />
+                    <>
+                      <Button
+                        title={
+                          paused?.id === model.id
+                            ? `Carry on · ${formatBytes(
+                                Math.max(0, totalBytes(model) - (onDisk[model.id] ?? 0)),
+                              )} left`
+                            : `Download ${formatBytes(totalBytes(model))}`
+                        }
+                        icon="cloud-download"
+                        onPress={() => void fetchModel(model)}
+                        style={{ flex: 1 }}
+                        disabled={busy !== null}
+                      />
+                      {(onDisk[model.id] ?? 0) > 0 ? (
+                        <Button
+                          title="Delete"
+                          variant="secondary"
+                          icon="trash"
+                          onPress={() => dropModel(model)}
+                          disabled={busy !== null}
+                        />
+                      ) : null}
+                    </>
                   )}
                 </View>
               )}

@@ -10,6 +10,7 @@
  * gigabyte or more, which the person starts and can undo.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as FileSystem from 'expo-file-system'
 import { initLlama, type LlamaContext } from 'llama.rn'
 
@@ -18,40 +19,55 @@ import type { RecognizedItem } from '@/api/types'
 /** Where the weights live. The cache directory would be swept by Android. */
 const HOME = `${FileSystem.documentDirectory}models/`
 
+export interface ModelFile {
+  url: string
+  /** The size that the host reports. It makes the bar honest at once. */
+  bytes: number
+}
+
 export interface LocalModel {
   id: string
   name: string
-  /** What a person sees before they spend the download. */
-  size: string
   note: string
   /** The weights, and the part that reads a picture. */
-  model: string
-  mmproj: string
+  model: ModelFile
+  mmproj: ModelFile
   /** Tokens that one picture may cost. It bounds the time per photograph. */
   imageTokens: number
+}
+
+/** What the whole download costs, in bytes. */
+export function totalBytes(model: LocalModel): number {
+  return model.model.bytes + model.mmproj.bytes
 }
 
 export const MODELS: LocalModel[] = [
   {
     id: 'smolvlm2-2.2b',
     name: 'SmolVLM2 2.2B',
-    size: '1.7 GB',
     note: 'Slower, and it names things better.',
-    model:
-      'https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/SmolVLM2-2.2B-Instruct-Q4_K_M.gguf',
-    mmproj:
-      'https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf',
+    model: {
+      url: 'https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/SmolVLM2-2.2B-Instruct-Q4_K_M.gguf',
+      bytes: 1_112_602_656,
+    },
+    mmproj: {
+      url: 'https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-2.2B-Instruct-Q8_0.gguf',
+      bytes: 592_523_200,
+    },
     imageTokens: 900,
   },
   {
     id: 'smolvlm2-500m',
     name: 'SmolVLM2 500M',
-    size: '546 MB',
     note: 'Quick, and it misses detail.',
-    model:
-      'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
-    mmproj:
-      'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
+    model: {
+      url: 'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
+      bytes: 436_808_704,
+    },
+    mmproj: {
+      url: 'https://huggingface.co/ggml-org/SmolVLM2-500M-Video-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf',
+      bytes: 108_785_184,
+    },
     imageTokens: 600,
   },
 ]
@@ -93,43 +109,191 @@ export async function statusOf(model: LocalModel): Promise<LocalStatus> {
   return { ready: weights > 0 && projector > 0, bytes: weights + projector }
 }
 
+/** What the screen shows while the weights arrive. */
+export interface DownloadProgress {
+  /** Between 0 and 1, across both files together. */
+  fraction: number
+  /** Bytes on the phone so far, and bytes in total. */
+  written: number
+  total: number
+  /** The recent rate, in bytes each second. Zero until it is known. */
+  perSecond: number
+  /** Seconds left at that rate, or null while it is unknown. */
+  secondsLeft: number | null
+}
+
+/** The caller stopped the download. Not a failure, so not an alarm. */
+export class DownloadCancelled extends Error {
+  constructor() {
+    super('The download was cancelled.')
+    this.name = 'DownloadCancelled'
+  }
+}
+
+/**
+ * Where an unfinished download left off.
+ *
+ * Android may stop the application while a download of two gigabytes runs.
+ * The bytes already on disk stay, and this holds the token that lets the
+ * next start carry on from them instead of beginning again.
+ */
+const RESUME_KEY = 'homestock.download'
+
+interface ResumeState {
+  modelId: string
+  part: 'model' | 'mmproj'
+  resumeData?: string
+}
+
+async function saveResume(state: ResumeState | null): Promise<void> {
+  if (state) await AsyncStorage.setItem(RESUME_KEY, JSON.stringify(state))
+  else await AsyncStorage.removeItem(RESUME_KEY)
+}
+
+/** The model whose download stopped part way, if there is one. */
+export async function unfinished(): Promise<LocalModel | null> {
+  try {
+    const raw = await AsyncStorage.getItem(RESUME_KEY)
+    if (!raw) return null
+    const state = JSON.parse(raw) as ResumeState
+    return MODELS.find((model) => model.id === state.modelId) ?? null
+  } catch {
+    return null
+  }
+}
+
+let task: FileSystem.DownloadResumable | null = null
+let stopped = false
+
+/** Stop the download and throw away the part that arrived. */
+export async function cancel(): Promise<void> {
+  stopped = true
+  const running = task
+  task = null
+  try {
+    await running?.cancelAsync()
+  } catch {
+    // The task may have ended between the tap and here.
+  }
+  await saveResume(null)
+}
+
 /**
  * Fetch the weights.
  *
- * `onProgress` reports a number between 0 and 1 across both files together,
- * because a person watching a bar does not care that there are two.
+ * The two files are one download to the person watching, so the numbers add
+ * up across both. The rate is smoothed: a raw reading jumps about, and a
+ * figure that flickers tells nobody anything.
+ *
+ * A download that stops carries on from the bytes already written, whether
+ * it stopped because the application closed or because somebody cancelled
+ * and started again.
  */
 export async function download(
   model: LocalModel,
-  onProgress: (fraction: number) => void,
+  onProgress: (progress: DownloadProgress) => void,
 ): Promise<void> {
   await FileSystem.makeDirectoryAsync(HOME, { intermediates: true }).catch(
     () => undefined,
   )
+  stopped = false
 
   const parts: Array<'model' | 'mmproj'> = ['model', 'mmproj']
-  const totals: Record<string, number> = {}
+  const total = totalBytes(model)
   const done: Record<string, number> = {}
+
+  // The files that are already here count as written.
+  for (const part of parts) {
+    const have = await sizeOf(pathOf(model, part))
+    if (have > 0) done[part] = have
+  }
+
+  let rate = 0
+  let lastAt = Date.now()
+  let lastBytes = Object.values(done).reduce((sum, value) => sum + value, 0)
+
+  const report = (): void => {
+    const written = parts.reduce((sum, key) => sum + (done[key] ?? 0), 0)
+    const now = Date.now()
+    const seconds = (now - lastAt) / 1000
+
+    if (seconds >= 0.5) {
+      const sample = (written - lastBytes) / seconds
+      // A quarter of the new reading, so the figure settles but still moves.
+      rate = rate === 0 ? sample : rate * 0.75 + sample * 0.25
+      lastAt = now
+      lastBytes = written
+    }
+
+    onProgress({
+      written,
+      total,
+      fraction: total > 0 ? Math.min(1, written / total) : 0,
+      perSecond: Math.max(0, rate),
+      secondsLeft: rate > 0 ? Math.max(0, (total - written) / rate) : null,
+    })
+  }
+
+  report()
+
+  const saved = await AsyncStorage.getItem(RESUME_KEY)
+  const state: ResumeState | null = saved
+    ? (JSON.parse(saved) as ResumeState)
+    : null
 
   for (const part of parts) {
     const target = pathOf(model, part)
-    if ((await sizeOf(target)) > 0) continue
+    const here = await sizeOf(target)
+    if (here >= model[part].bytes) continue
 
-    const task = FileSystem.createDownloadResumable(
-      model[part],
+    // Carry on from the token when this is the file that stopped.
+    const resumeData =
+      state && state.modelId === model.id && state.part === part
+        ? state.resumeData
+        : undefined
+
+    let sinceSave = 0
+    const running = FileSystem.createDownloadResumable(
+      model[part].url,
       target,
       {},
-      (state) => {
-        totals[part] = state.totalBytesExpectedToWrite
-        done[part] = state.totalBytesWritten
-        const whole = parts.reduce((sum, key) => sum + (totals[key] ?? 0), 0)
-        const so_far = parts.reduce((sum, key) => sum + (done[key] ?? 0), 0)
-        if (whole > 0) onProgress(Math.min(1, so_far / whole))
+      (progress) => {
+        done[part] = progress.totalBytesWritten
+        report()
+        // The token changes as the download runs. Writing it every tick
+        // would hammer storage, so it goes every few megabytes.
+        sinceSave += 1
+        if (sinceSave % 40 === 0) {
+          void saveResume({
+            modelId: model.id,
+            part,
+            resumeData: running.savable().resumeData,
+          })
+        }
       },
+      resumeData,
     )
-    await task.downloadAsync()
+    task = running
+    await saveResume({ modelId: model.id, part, resumeData })
+
+    const result = resumeData
+      ? await running.resumeAsync()
+      : await running.downloadAsync()
+    task = null
+
+    if (stopped) throw new DownloadCancelled()
+    if (!result) throw new Error(`The download of the ${part} file stopped.`)
+    done[part] = await sizeOf(target)
   }
-  onProgress(1)
+
+  await saveResume(null)
+  onProgress({
+    written: total,
+    total,
+    fraction: 1,
+    perSecond: rate,
+    secondsLeft: 0,
+  })
 }
 
 export async function remove(model: LocalModel): Promise<void> {
@@ -137,6 +301,8 @@ export async function remove(model: LocalModel): Promise<void> {
   for (const part of ['model', 'mmproj'] as const) {
     await FileSystem.deleteAsync(pathOf(model, part), { idempotent: true })
   }
+  const pending = await unfinished()
+  if (pending?.id === model.id) await saveResume(null)
 }
 
 let context: LlamaContext | null = null
