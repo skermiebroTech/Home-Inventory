@@ -1,0 +1,35 @@
+# Tool configuration for the HomeStock backend.
+#
+# The package itself is not built from here. The Docker image installs
+# requirements.txt and copies the source, so this file holds only the
+# settings for ruff and pytest.
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # import order
+  "UP",  # newer Python syntax
+  "B",   # common bugs
+  "SIM", # simpler code
+  "RUF", # ruff's own rules
+  "BLE", # a blind "except Exception" must say why
+  "ASYNC",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A migration is generated. Its long lines and its import order come from
+# Alembic, not from a person.
+"alembic/versions/*" = ["E501", "I001"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+addopts = "-q --strict-markers"
+filterwarnings = ["ignore::DeprecationWarning:pgserver.*"]

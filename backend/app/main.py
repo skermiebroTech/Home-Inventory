@@ -19,6 +19,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app import __version__
 from app.config import settings
@@ -28,6 +30,7 @@ from app.schemas.common import Envelope, ErrorDetail
 from app.services.backup_service import get_backup_service
 from app.services.job_service import get_job_store
 from app.utils.errors import ApiError
+from app.utils.rate_limit import limiter, rate_limit_handler
 
 logging.basicConfig(
     level=settings.log_level.upper(),
@@ -96,7 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             await asyncio.to_thread(_run_migrations)
             logger.info("Database migrations are up to date.")
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the service must still start
             # A failed migration must not stop the container. The health route
             # then reports the database as unmigrated, and the operator can
             # read the log and fix it.
@@ -130,6 +133,10 @@ app = FastAPI(
 
 # The service runs on a home network. The web interface, the mobile
 # application, and any tablet on the LAN all call it from a different origin.
+# The sign in routes carry a rate limit. Everything else needs a token.
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -150,15 +157,18 @@ def _envelope_response(
     return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
 
+@app.exception_handler(RateLimitExceeded)
+async def handle_rate_limit(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return rate_limit_handler(exc)
+
+
 @app.exception_handler(ApiError)
 async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
     return _envelope_response(exc.status_code, exc.code, exc.message, exc.details)
 
 
 @app.exception_handler(HTTPException)
-async def handle_http_exception(
-    request: Request, exc: HTTPException
-) -> JSONResponse:
+async def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
     return _envelope_response(
         exc.status_code, f"http_{exc.status_code}", str(exc.detail)
     )

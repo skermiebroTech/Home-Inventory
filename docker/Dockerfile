@@ -12,30 +12,14 @@
 FROM node:20-alpine AS frontend
 
 WORKDIR /build
-COPY frontend/ ./
 
-# Phase 2b writes the real frontend. Until then the directory holds only a
-# placeholder package.json, and this stage produces a holding page so that
-# the image still builds.
-RUN set -eux; \
-    if [ -f package-lock.json ]; then \
-        npm ci; \
-    elif node -e "process.exit(Object.keys(require('./package.json').dependencies || {}).length ? 0 : 1)"; then \
-        npm install; \
-    fi; \
-    if node -e "process.exit((require('./package.json').scripts || {}).build ? 0 : 1)"; then \
-        npm run build; \
-    else \
-        mkdir -p dist; \
-        printf '%s\n' \
-          '<!doctype html><meta charset="utf-8">' \
-          '<title>HomeStock</title>' \
-          '<body style="font-family:system-ui;margin:3rem;max-width:40rem">' \
-          '<h1>HomeStock API</h1>' \
-          '<p>The web interface is not built yet.</p>' \
-          '<p><a href="/api/docs">Open the API documentation</a></p>' \
-          > dist/index.html; \
-    fi
+# The lock file is copied first, so a source change does not repeat the
+# install step.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
 
 # ---------------------------------------------------------------------------
 # Stage 2: the API

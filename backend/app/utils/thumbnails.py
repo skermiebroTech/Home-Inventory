@@ -274,7 +274,7 @@ def _exif_without_gps(image: Image.Image, *, strip: bool) -> tuple[bytes | None,
     """Return the EXIF block with the GPS pointer removed."""
     try:
         exif = image.getexif()
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unreadable EXIF block is dropped
         return None, False
     if not exif:
         return None, False
@@ -283,7 +283,7 @@ def _exif_without_gps(image: Image.Image, *, strip: bool) -> tuple[bytes | None,
         del exif[GPS_IFD_TAG]
     try:
         return exif.tobytes(), (had_gps and strip)
-    except Exception:
+    except Exception:  # noqa: BLE001 - an EXIF block that will not re-encode is dropped
         # An EXIF block that Pillow cannot re-encode is dropped, which is safe.
         return None, had_gps
 

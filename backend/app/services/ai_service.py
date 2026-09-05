@@ -218,7 +218,7 @@ class AIService:
                     self._get_json(client, "/api/ps"),
                     return_exceptions=True,
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the status must always answer
             return self._unreachable(str(exc))
 
         if isinstance(tags, BaseException):

@@ -153,7 +153,7 @@ class OCRService:
                 "Tesseract is not installed. The receipt keeps its raw image only."
             )
             return ""
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - OCR must never break an upload
             logger.warning("Tesseract failed: %s", exc)
             return ""
         return text[:MAX_RAW_TEXT_CHARS]
@@ -167,7 +167,7 @@ class OCRService:
         self._apply_cmd(pytesseract)
         try:
             return str(pytesseract.get_tesseract_version())
-        except Exception:
+        except Exception:  # noqa: BLE001 - a missing binary is not an error here
             return None
 
     def _apply_cmd(self, pytesseract: Any) -> None:
@@ -192,12 +192,22 @@ def build_parsed_receipt(
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             continue
+        quantity = coerce_number(entry.get("quantity"))
+        unit_price = coerce_number(entry.get("unit_price"))
+        total = coerce_number(entry.get("total"))
+        # A model often fills one price field and leaves the other null. The
+        # line keeps its amount either way.
+        if total is None and unit_price is not None:
+            total = unit_price * (quantity if quantity and quantity > 0 else 1)
+        if unit_price is None and total is not None and quantity and quantity > 0:
+            unit_price = total / quantity
+
         lines.append(
             ReceiptLine(
                 name=name.strip()[:255],
-                quantity=coerce_number(entry.get("quantity")),
-                unit_price=coerce_number(entry.get("unit_price")),
-                total=coerce_number(entry.get("total")),
+                quantity=quantity,
+                unit_price=unit_price,
+                total=total,
             )
         )
 

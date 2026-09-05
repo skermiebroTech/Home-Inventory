@@ -23,9 +23,7 @@ class Location(UUIDMixin, TimestampMixin, SyncMixin, Base):
     """A place that holds items. A location may hold other locations."""
 
     __tablename__ = "locations"
-    __table_args__ = (
-        Index("ix_locations_user_parent", "user_id", "parent_id"),
-    )
+    __table_args__ = (Index("ix_locations_user_parent", "user_id", "parent_id"),)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

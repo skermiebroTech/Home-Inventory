@@ -75,9 +75,7 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
         sa.Column("role", sa.String(length=20), server_default="user", nullable=False),
-        sa.Column(
-            "is_active", sa.Boolean(), server_default="true", nullable=False
-        ),
+        sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
         *_timestamps(),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -115,9 +113,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_locations_user_id", "locations", ["user_id"])
     op.create_index("ix_locations_deleted_at", "locations", ["deleted_at"])
-    op.create_index(
-        "ix_locations_user_parent", "locations", ["user_id", "parent_id"]
-    )
+    op.create_index("ix_locations_user_parent", "locations", ["user_id", "parent_id"])
 
     # --- items ---
     op.create_table(
@@ -153,9 +149,7 @@ def upgrade() -> None:
         *_sync_columns(),
         *_timestamps(),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["location_id"], ["locations.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["location_id"], ["locations.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_items_user_id", "items", ["user_id"])
@@ -180,9 +174,7 @@ def upgrade() -> None:
         sa.Column("item_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("file_path", sa.String(length=500), nullable=False),
         sa.Column("thumbnail_path", sa.String(length=500), nullable=True),
-        sa.Column(
-            "is_primary", sa.Boolean(), server_default="false", nullable=False
-        ),
+        sa.Column("is_primary", sa.Boolean(), server_default="false", nullable=False),
         sa.Column("ai_description", sa.Text(), nullable=True),
         *_timestamps(),
         sa.ForeignKeyConstraint(["item_id"], ["items.id"], ondelete="CASCADE"),
@@ -275,9 +267,7 @@ def upgrade() -> None:
         *_timestamps(),
         sa.ForeignKeyConstraint(["item_id"], ["items.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "item_id", "field_name", name="uq_custom_fields_item_name"
-        ),
+        sa.UniqueConstraint("item_id", "field_name", name="uq_custom_fields_item_name"),
     )
     op.create_index("ix_custom_fields_item_id", "custom_fields", ["item_id"])
     op.create_index("ix_custom_fields_deleted_at", "custom_fields", ["deleted_at"])
@@ -297,9 +287,7 @@ def upgrade() -> None:
             name="ck_nfc_tags_one_target",
         ),
         sa.ForeignKeyConstraint(["item_id"], ["items.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["location_id"], ["locations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["location_id"], ["locations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_nfc_tags_item_id", "nfc_tags", ["item_id"])

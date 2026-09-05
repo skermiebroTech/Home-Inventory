@@ -121,10 +121,15 @@ async def upload_receipt(
 
     # The OCR and the model call are slow on a CPU, so they run after the
     # reply. The job id goes in a header for a client that wants to poll it.
+    #
+    # The id is read here, not inside the task. The task starts at the next
+    # await, which is the refresh below, and an ORM attribute read during a
+    # refresh would be a second operation on the same session.
+    receipt_id = receipt.id
     job = get_job_store().submit(
         kind="receipt_parse",
         user_id=user.id,
-        work=lambda: _parse_in_background(receipt.id, data),
+        work=lambda: _parse_in_background(receipt_id, data),
     )
     response.headers["X-AI-Job-Id"] = str(job.id)
     return ok(await _detail(session, receipt))

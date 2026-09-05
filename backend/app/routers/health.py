@@ -39,7 +39,7 @@ async def _check_database(session: SessionDep) -> tuple[ComponentHealth, bool]:
     start = time.perf_counter()
     try:
         await session.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - report any driver failure
         return (
             ComponentHealth(ok=False, detail=f"{type(exc).__name__}: {exc}"),
             False,
@@ -51,7 +51,7 @@ async def _check_database(session: SessionDep) -> tuple[ComponentHealth, bool]:
         count = await session.scalar(select(func.count()).select_from(User))
         has_user = bool(count)
         detail = None
-    except Exception:
+    except Exception:  # noqa: BLE001 - the schema is not migrated yet
         await session.rollback()
         has_user = False
         detail = "Connected, but the schema is not migrated yet."
@@ -68,7 +68,7 @@ async def _check_ollama() -> ComponentHealth:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(f"{settings.ollama_url.rstrip('/')}/api/tags")
             response.raise_for_status()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any network failure means down
         return ComponentHealth(ok=False, detail=f"{type(exc).__name__}: {exc}")
     latency = int((time.perf_counter() - start) * 1000)
     return ComponentHealth(ok=True, latency_ms=latency)

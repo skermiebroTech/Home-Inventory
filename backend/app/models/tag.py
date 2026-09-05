@@ -43,9 +43,7 @@ class Tag(UUIDMixin, TimestampMixin, Base):
         String(9), nullable=False, default="#64748b", server_default="#64748b"
     )
 
-    items: Mapped[list[Item]] = relationship(
-        secondary=item_tags, back_populates="tags"
-    )
+    items: Mapped[list[Item]] = relationship(secondary=item_tags, back_populates="tags")
 
     def __repr__(self) -> str:
         return f"<Tag {self.name}>"

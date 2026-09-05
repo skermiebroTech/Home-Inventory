@@ -20,7 +20,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: ghcr.io/YOUR_USERNAME/home-inventory:latest
+    image: ${HS_IMAGE:-ghcr.io/your-username/home-inventory:latest}
     container_name: homestock
     restart: unless-stopped
     env_file:

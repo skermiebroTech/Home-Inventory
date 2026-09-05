@@ -75,6 +75,14 @@ class Settings(BaseSettings):
         default="HS256", validation_alias=_alias("jwt_algorithm")
     )
 
+    # --- Rate limits ---
+    # The sign in routes are the only ones that an unknown caller can reach,
+    # so they are the only ones that carry a limit. Set the value to an empty
+    # string to turn the limit off.
+    rate_limit_auth: str = Field(
+        default="20/minute", validation_alias=_alias("rate_limit_auth")
+    )
+
     # --- CORS ---
     cors_origins: str = Field(default="*", validation_alias=_alias("cors_origins"))
 
@@ -96,9 +104,7 @@ class Settings(BaseSettings):
         default="llama3.2:3b", validation_alias=_alias("ollama_text_model")
     )
     # CPU inference is slow. This ceiling stops a stuck request from hanging.
-    ollama_timeout: int = Field(
-        default=300, validation_alias=_alias("ollama_timeout")
-    )
+    ollama_timeout: int = Field(default=300, validation_alias=_alias("ollama_timeout"))
     # Seconds to hold an AI request open before it becomes a background job.
     # A request that outlives the reverse proxy timeout fails for the client.
     ai_inline_timeout: int = Field(

@@ -43,9 +43,7 @@ class Receipt(UUIDMixin, TimestampMixin, SyncMixin, Base):
     # Raw Tesseract output. Kept so a parse can be repeated without the image.
     ocr_raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The structured result from the text model.
-    ocr_parsed_json: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    ocr_parsed_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="receipts")
     lines: Mapped[list[ReceiptItem]] = relationship(

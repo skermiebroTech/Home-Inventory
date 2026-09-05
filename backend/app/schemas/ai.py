@@ -80,9 +80,7 @@ class AiJob(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
-    error: str | None = Field(
-        default=None, description="Set when status is failed."
-    )
+    error: str | None = Field(default=None, description="Set when status is failed.")
     recognize_result: RecognizeResult | None = None
     receipt_result: ParsedReceipt | None = None
 

@@ -315,7 +315,7 @@ def _photo_flowable(
         image.drawWidth = width
         image.drawHeight = width * ratio
         return image
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a bad photo must not stop the report
         logger.info("The report skipped the photo %s: %s", path, exc)
         return ""
 

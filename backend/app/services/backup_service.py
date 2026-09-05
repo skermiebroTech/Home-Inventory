@@ -374,7 +374,7 @@ def validate_cron(expression: str) -> None:
 
 
 async def push_with_rclone(
-    path: Path, remote: str, *, timeout: float = RCLONE_TIMEOUT
+    path: Path, remote: str, *, seconds: float = RCLONE_TIMEOUT
 ) -> str | None:
     """Copy one file to an rclone remote. Return a warning text on failure."""
     if shutil.which("rclone") is None:
@@ -389,9 +389,9 @@ async def push_with_rclone(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        _, stderr = await asyncio.wait_for(process.communicate(), timeout=seconds)
     except TimeoutError:
-        return f"rclone did not finish in {timeout:.0f} seconds."
+        return f"rclone did not finish in {seconds:.0f} seconds."
     except OSError as exc:
         return f"rclone could not start: {exc}"
 

@@ -93,7 +93,7 @@ class JobStore:
             job.status = STATUS_FAILED
             job.error = "The job was cancelled."
             raise
-        except Exception as exc:  # the job must record every failure
+        except Exception as exc:  # noqa: BLE001 - a job records every failure
             job.status = STATUS_FAILED
             job.error = str(exc)
             job.exception = exc
@@ -101,16 +101,16 @@ class JobStore:
         finally:
             job.finished_at = datetime.now(UTC)
 
-    async def wait(self, job: JobRecord, timeout: float) -> JobRecord:
+    async def wait(self, job: JobRecord, seconds: float) -> JobRecord:
         """Wait a short time for a job. Return it whether it finished or not."""
-        if job.task is None or job.done or timeout <= 0:
+        if job.task is None or job.done or seconds <= 0:
             return job
         try:
-            await asyncio.wait_for(asyncio.shield(job.task), timeout=timeout)
+            await asyncio.wait_for(asyncio.shield(job.task), timeout=seconds)
         except TimeoutError:
             # The work continues in the background. The client polls for it.
             pass
-        except Exception:
+        except Exception:  # noqa: BLE001 - _run already recorded the failure
             # `_run` already recorded the failure on the job record.
             pass
         return job

@@ -377,3 +377,20 @@ async def test_the_retention_rule_keeps_the_newest_archives(tmp_path: Path) -> N
     deleted = service.apply_retention()
     assert len(deleted) == 2
     assert len(service.list_backups()) == 2
+
+
+def test_a_line_keeps_its_amount_when_the_model_fills_one_field() -> None:
+    from app.services.ocr_service import build_parsed_receipt
+
+    parsed = build_parsed_receipt(
+        {
+            "store_name": "Bunnings",
+            "items": [
+                {"name": "Screws", "quantity": 2, "unit_price": 9.5, "total": None},
+                {"name": "Glue", "quantity": 3, "unit_price": None, "total": 12.0},
+                {"name": "Tape", "quantity": None, "unit_price": 4.25, "total": None},
+            ],
+        }
+    )
+    assert [line.total for line in parsed.lines] == [19.0, 12.0, 4.25]
+    assert parsed.lines[1].unit_price == 4.0

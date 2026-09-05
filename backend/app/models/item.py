@@ -83,9 +83,7 @@ class Item(UUIDMixin, TimestampMixin, SyncMixin, Base):
     purchase_price: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 2), nullable=True
     )
-    current_value: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True
-    )
+    current_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     purchase_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     purchase_location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     warranty_expires: Mapped[date | None] = mapped_column(
@@ -116,9 +114,7 @@ class Item(UUIDMixin, TimestampMixin, SyncMixin, Base):
         passive_deletes=True,
         order_by="ItemPhoto.is_primary.desc(), ItemPhoto.created_at",
     )
-    tags: Mapped[list[Tag]] = relationship(
-        secondary=item_tags, back_populates="items"
-    )
+    tags: Mapped[list[Tag]] = relationship(secondary=item_tags, back_populates="items")
     maintenance_logs: Mapped[list[MaintenanceLog]] = relationship(
         back_populates="item", cascade="all, delete-orphan", passive_deletes=True
     )

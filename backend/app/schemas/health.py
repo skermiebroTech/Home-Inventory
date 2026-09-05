@@ -37,6 +37,4 @@ class HealthStatus(BaseModel):
     secret_key_is_default: bool = Field(
         description="True when the operator did not change HS_SECRET_KEY."
     )
-    setup_required: bool = Field(
-        description="True when no user account exists yet."
-    )
+    setup_required: bool = Field(description="True when no user account exists yet.")

@@ -44,6 +44,10 @@ export default function ReceiptDetailPage() {
   const { data: itemPage } = useItems({ per_page: 200, sort: 'name' })
 
   const [form, setForm] = useState({ vendor: '', purchase_date: '', total_amount: '' })
+  // The page polls while the OCR runs. The form must take the server values
+  // when a new version arrives, and must not overwrite what the user typed
+  // on every poll of the same version.
+  const [shownVersion, setShownVersion] = useState<number | null>(null)
   const [linking, setLinking] = useState<string | null>(null)
   const [chosenItem, setChosenItem] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -54,13 +58,14 @@ export default function ReceiptDetailPage() {
   }, [receipt?.ocr_parsed_json])
 
   useEffect(() => {
-    if (!receipt) return
+    if (!receipt || receipt.version === shownVersion) return
     setForm({
       vendor: receipt.vendor ?? '',
       purchase_date: receipt.purchase_date ?? '',
       total_amount: receipt.total_amount ?? '',
     })
-  }, [receipt?.id, receipt?.vendor, receipt?.purchase_date, receipt?.total_amount])
+    setShownVersion(receipt.version)
+  }, [receipt, shownVersion])
 
   if (isLoading) return <Loading />
   if (error) return <ErrorNote error={error} />

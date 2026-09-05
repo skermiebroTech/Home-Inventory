@@ -1,8 +1,12 @@
-"""Authentication routes."""
+"""Authentication routes.
 
-from __future__ import annotations
+This module does not use `from __future__ import annotations`. The slowapi
+decorator wraps the route function, and FastAPI then resolves the string
+annotations in the namespace of slowapi, where `Request` and `SessionDep` do
+not exist. Real annotation objects avoid that.
+"""
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 from sqlalchemy import func, select
 
 from app.models.user import User
@@ -22,6 +26,7 @@ from app.utils.auth import (
     verify_password_async,
 )
 from app.utils.errors import conflict, unauthorized
+from app.utils.rate_limit import auth_limit, limiter
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -52,7 +57,10 @@ async def _find_by_email(session: SessionDep, email: str) -> User | None:
     status_code=status.HTTP_201_CREATED,
     summary="Create the first user, or add another user.",
 )
-async def register(body: RegisterRequest, session: SessionDep) -> Envelope[UserRead]:
+@limiter.limit(auth_limit)
+async def register(
+    request: Request, body: RegisterRequest, session: SessionDep
+) -> Envelope[UserRead]:
     email = body.email.strip().lower()
     if await _find_by_email(session, email) is not None:
         raise conflict("An account with that email address already exists.")
@@ -74,7 +82,10 @@ async def register(body: RegisterRequest, session: SessionDep) -> Envelope[UserR
 
 
 @router.post("/login", response_model=Envelope[TokenPair], summary="Sign in.")
-async def login(body: LoginRequest, session: SessionDep) -> Envelope[TokenPair]:
+@limiter.limit(auth_limit)
+async def login(
+    request: Request, body: LoginRequest, session: SessionDep
+) -> Envelope[TokenPair]:
     user = await _find_by_email(session, body.email)
     password_hash = user.password_hash if user else _DUMMY_HASH
     correct = await verify_password_async(body.password, password_hash)
@@ -91,7 +102,10 @@ async def login(body: LoginRequest, session: SessionDep) -> Envelope[TokenPair]:
     response_model=Envelope[TokenPair],
     summary="Trade a refresh token for a new token pair.",
 )
-async def refresh(body: RefreshRequest, session: SessionDep) -> Envelope[TokenPair]:
+@limiter.limit(auth_limit)
+async def refresh(
+    request: Request, body: RefreshRequest, session: SessionDep
+) -> Envelope[TokenPair]:
     try:
         payload = decode_token(body.refresh_token, expected_type=TOKEN_TYPE_REFRESH)
     except TokenError as exc:

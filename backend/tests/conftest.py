@@ -66,6 +66,9 @@ os.environ.update(
         "HS_AI_ENABLED": "false",
         "HS_BACKUP_ENABLED": "false",
         "HS_SERVE_MEDIA": "false",
+        # The suite signs in many times in one second. The limit stays off,
+        # and test_rate_limit.py turns it on for its own check.
+        "HS_RATE_LIMIT_AUTH": "",
     }
 )
 for name in ("uploads", "backups", "config"):
