@@ -1,5 +1,17 @@
+# Development and test dependencies.
+#
+# Install the runtime dependencies first:
+#     pip install -r requirements.txt -r requirements-dev.txt
+#
+# The tests need a real PostgreSQL server, because the models use a UUID
+# primary key, JSONB, and a generated tsvector column. Set
+# HS_TEST_DATABASE_URL to point at a server that already runs. Without that
+# variable, the suite starts a private server through pgserver, which brings
+# its own PostgreSQL binaries and needs no Docker.
+
 -r requirements.txt
 
 pytest==8.3.4
 pytest-asyncio==0.25.0
+pgserver==0.1.4
 ruff==0.8.6

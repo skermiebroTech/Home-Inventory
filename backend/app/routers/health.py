@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import shutil
 import time
+from datetime import date, timedelta
+from decimal import Decimal
 
 import httpx
 from fastapi import APIRouter, Response, status
@@ -16,14 +18,20 @@ from sqlalchemy import func, select, text
 
 from app import __version__
 from app.config import settings
+from app.models.item import Item
+from app.models.location import Location
+from app.models.maintenance import MaintenanceLog
+from app.models.receipt import Receipt
 from app.models.user import User
 from app.schemas.common import Envelope, ok
-from app.schemas.dashboard import DashboardSummary
+from app.schemas.dashboard import DashboardSummary, LocationCount
 from app.schemas.health import ComponentHealth, DiskUsage, HealthStatus
 from app.utils.auth import CurrentUser, SessionDep
-from app.utils.errors import not_implemented
 
 router = APIRouter(prefix="/api", tags=["Health"])
+
+#: The dashboard counts maintenance and warranties inside this window.
+DASHBOARD_HORIZON_DAYS = 30
 
 
 async def _check_database(session: SessionDep) -> tuple[ComponentHealth, bool]:
@@ -137,4 +145,91 @@ async def health(session: SessionDep, response: Response) -> Envelope[HealthStat
 async def dashboard(
     user: CurrentUser, session: SessionDep
 ) -> Envelope[DashboardSummary]:
-    not_implemented("GET /api/dashboard")
+    today = date.today()
+    horizon = today + timedelta(days=DASHBOARD_HORIZON_DAYS)
+    live_items = (Item.user_id == user.id, Item.deleted_at.is_(None))
+
+    totals = (
+        await session.execute(
+            select(
+                func.count(Item.id),
+                func.coalesce(func.sum(Item.quantity), 0),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(Item.current_value, Item.purchase_price, 0)
+                        * Item.quantity
+                    ),
+                    0,
+                ),
+            ).where(*live_items)
+        )
+    ).one()
+
+    by_location = (
+        await session.execute(
+            select(
+                Location.id,
+                Location.name,
+                func.count(Item.id),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(Item.current_value, Item.purchase_price, 0)
+                        * Item.quantity
+                    ),
+                    0,
+                ),
+            )
+            .join(Item, Item.location_id == Location.id)
+            .where(*live_items, Location.deleted_at.is_(None))
+            .group_by(Location.id, Location.name)
+            .order_by(func.count(Item.id).desc())
+        )
+    ).all()
+
+    lent_count = await session.scalar(
+        select(func.count(Item.id)).where(*live_items, Item.is_lent.is_(True))
+    )
+    maintenance_due = await session.scalar(
+        select(func.count(MaintenanceLog.id))
+        .join(Item, Item.id == MaintenanceLog.item_id)
+        .where(
+            *live_items,
+            MaintenanceLog.deleted_at.is_(None),
+            MaintenanceLog.next_due_date.is_not(None),
+            MaintenanceLog.next_due_date <= horizon,
+        )
+    )
+    warranty_expiring = await session.scalar(
+        select(func.count(Item.id)).where(
+            *live_items,
+            Item.warranty_expires.is_not(None),
+            Item.warranty_expires >= today,
+            Item.warranty_expires <= horizon,
+        )
+    )
+    receipt_count = await session.scalar(
+        select(func.count(Receipt.id)).where(
+            Receipt.user_id == user.id, Receipt.deleted_at.is_(None)
+        )
+    )
+
+    return ok(
+        DashboardSummary(
+            total_items=int(totals[0] or 0),
+            total_quantity=int(totals[1] or 0),
+            total_value=Decimal(str(totals[2] or 0)),
+            items_by_location=[
+                LocationCount(
+                    location_id=row[0],
+                    location_name=row[1],
+                    item_count=int(row[2]),
+                    total_value=Decimal(str(row[3] or 0)),
+                )
+                for row in by_location
+            ],
+            lent_count=int(lent_count or 0),
+            maintenance_due_count=int(maintenance_due or 0),
+            warranty_expiring_count=int(warranty_expiring or 0),
+            receipt_count=int(receipt_count or 0),
+        )
+    )

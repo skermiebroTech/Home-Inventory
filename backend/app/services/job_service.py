@@ -12,6 +12,7 @@ which is acceptable: the client simply sends the image again.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -109,11 +110,14 @@ class JobStore:
         except TimeoutError:
             # The work continues in the background. The client polls for it.
             pass
-        except Exception:  # noqa: S110 - _run already recorded the failure
+        except Exception:
+            # `_run` already recorded the failure on the job record.
             pass
         return job
 
-    def get(self, job_id: uuid.UUID, user_id: uuid.UUID | None = None) -> JobRecord | None:
+    def get(
+        self, job_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> JobRecord | None:
         """Return one job of this user, or None."""
         job = self._jobs.get(job_id)
         if job is None:
@@ -144,14 +148,16 @@ class JobStore:
 
     async def shutdown(self) -> None:
         """Cancel every running job. The lifespan handler calls this."""
-        tasks = [job.task for job in self._jobs.values() if job.task and not job.task.done()]
+        tasks = [
+            job.task
+            for job in self._jobs.values()
+            if job.task is not None and not job.task.done()
+        ]
         for task in tasks:
             task.cancel()
         for task in tasks:
-            try:
+            with contextlib.suppress(BaseException):
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
         self._jobs.clear()
 
 

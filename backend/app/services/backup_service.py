@@ -400,12 +400,64 @@ async def push_with_rclone(
     return None
 
 
+# --------------------------------------------------------------------------
+# The default export callback
+# --------------------------------------------------------------------------
+
+
+async def write_installation_backup(destination: Path) -> ExportResult:
+    """Write one full archive of the whole installation to `destination`.
+
+    This is the callback that the scheduler runs. It archives every account,
+    because a backup belongs to the server, not to one user.
+    """
+    from app.config import settings
+    from app.database import SessionLocal
+    from app.services.export_service import (
+        FullExportRequest,
+        build_full_export,
+        items_to_csv,
+    )
+    from app.utils.queries import item_export_rows
+
+    async with SessionLocal() as session:
+        rows = await item_export_rows(session)
+
+    return await build_full_export(
+        FullExportRequest(
+            destination=destination,
+            metadata={"application": "HomeStock", "item_count": len(rows)},
+            csv_bytes=items_to_csv(rows),
+            database_url=settings.sync_database_url,
+            uploads_dir=settings.upload_dir,
+        )
+    )
+
+
+_service: BackupService | None = None
+
+
+def get_backup_service() -> BackupService:
+    """Return the process wide backup service.
+
+    The scheduler lives on this object, so every caller must get the same
+    instance. `main.py` starts it, and the backup routes read and change it.
+    """
+    global _service
+    if _service is None:
+        _service = BackupService(write_installation_backup)
+        _service.load_state()
+    return _service
+
+
 __all__ = [
     "BACKUP_PREFIX",
     "BackupConfig",
     "BackupRun",
     "BackupService",
     "ExportCallback",
+    "get_backup_service",
     "push_with_rclone",
     "validate_cron",
+    "write_installation_backup",
 ]

@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_session
 from app.models.user import User
-from app.utils.errors import unauthorized
+from app.utils.errors import forbidden, unauthorized
 
 bearer_scheme = HTTPBearer(auto_error=False, description="A JWT access token.")
 
@@ -196,9 +196,7 @@ async def get_current_user(
     if credentials is None or not credentials.credentials:
         raise unauthorized("This route needs a bearer token.")
     try:
-        payload = decode_token(
-            credentials.credentials, expected_type=TOKEN_TYPE_ACCESS
-        )
+        payload = decode_token(credentials.credentials, expected_type=TOKEN_TYPE_ACCESS)
     except TokenError as exc:
         raise unauthorized(str(exc)) from exc
 
@@ -212,12 +210,23 @@ async def get_current_user(
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
+
+def require_admin(user: User) -> None:
+    """Raise 403 unless the user owns the installation.
+
+    The first account that registers becomes the admin. Only that role may
+    run a restore, because a restore replaces every row and every file.
+    """
+    if user.role != "admin":
+        raise forbidden("Only an administrator may do that.")
+
+
 __all__ = [
+    "TOKEN_TYPE_ACCESS",
+    "TOKEN_TYPE_REFRESH",
     "BearerDep",
     "CurrentUser",
     "SessionDep",
-    "TOKEN_TYPE_ACCESS",
-    "TOKEN_TYPE_REFRESH",
     "TokenError",
     "TokenPayload",
     "access_token_lifetime_seconds",
@@ -228,6 +237,7 @@ __all__ = [
     "get_current_user",
     "hash_password",
     "hash_password_async",
+    "require_admin",
     "verify_password",
     "verify_password_async",
 ]

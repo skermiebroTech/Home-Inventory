@@ -81,10 +81,13 @@ async def render_qr_png(
     box_size: int = DEFAULT_BOX_SIZE,
     border: int = DEFAULT_BORDER,
     caption: str | None = None,
+    width: int | None = None,
 ) -> bytes:
     """Render a QR code in a worker thread, so the event loop stays free."""
     return await anyio.to_thread.run_sync(
-        lambda: generate_qr_png(data, box_size=box_size, border=border, caption=caption)
+        lambda: generate_qr_png(
+            data, box_size=box_size, border=border, caption=caption, width=width
+        )
     )
 
 

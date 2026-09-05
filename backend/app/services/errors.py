@@ -81,6 +81,17 @@ class BackupError(ServiceError):
     code = "backup_failed"
 
 
+def to_api_error(exc: ServiceError) -> Any:
+    """Turn a service failure into the HTTP error that the routers raise.
+
+    The import is local, so that the service layer does not depend on FastAPI
+    at import time.
+    """
+    from app.utils.errors import ApiError
+
+    return ApiError(exc.status_code, exc.code, exc.message, exc.details or None)
+
+
 __all__ = [
     "AIUnavailableError",
     "BackupError",
@@ -91,4 +102,5 @@ __all__ = [
     "ServiceUnavailableError",
     "UpstreamError",
     "ValidationError",
+    "to_api_error",
 ]

@@ -55,15 +55,15 @@ async def upcoming_maintenance(
 
     due: list[MaintenanceDue] = []
     for log, item_name in rows:
-        entry = MaintenanceDue.model_validate(
-            log,
-            update={
-                "item_name": item_name,
+        record = MaintenanceRead.model_validate(log)
+        due.append(
+            MaintenanceDue(
+                **record.model_dump(),
+                item_name=item_name,
                 # Overdue work stays in the list, with a negative count.
-                "days_until_due": (log.next_due_date - today).days,
-            },
+                days_until_due=(log.next_due_date - today).days,
+            )
         )
-        due.append(entry)
     return ok(due)
 
 

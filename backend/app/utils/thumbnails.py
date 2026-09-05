@@ -93,7 +93,7 @@ def parse_widths(value: object) -> tuple[int, ...]:
     """Read thumbnail widths from a list, a tuple, or a comma separated string."""
     if isinstance(value, str):
         parts = [p.strip() for p in value.split(",") if p.strip()]
-    elif isinstance(value, (list, tuple)):
+    elif isinstance(value, list | tuple):
         parts = [str(p).strip() for p in value]
     else:
         return DEFAULT_THUMBNAIL_WIDTHS
@@ -214,6 +214,17 @@ def delete_stored_image(
         paths.append(to_absolute(str(thumb)))
     for path in paths:
         path.unlink(missing_ok=True)
+
+
+def thumbnail_path_for(original_path: Path | str, width: int) -> Path | None:
+    """Return the generated thumbnail of one width, if the file is there.
+
+    The insurance report uses it to place a readable photograph without
+    loading the full sized original.
+    """
+    original = to_absolute(str(original_path))
+    candidate = original.with_name(f"{original.stem}_{width}{original.suffix}")
+    return candidate if candidate.is_file() else None
 
 
 def delete_image_set(original_path: Path | str) -> None:
@@ -338,6 +349,7 @@ __all__ = [
     "parse_widths",
     "store_image",
     "store_image_sync",
+    "thumbnail_path_for",
     "to_absolute",
     "to_relative",
     "upload_dir_for",

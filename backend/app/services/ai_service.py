@@ -38,7 +38,8 @@ ITEM_RECOGNITION_PROMPT: Final[str] = (
 BULK_SCAN_SUFFIX: Final[str] = (
     " This image shows a shelf, a drawer, or a work area that holds several "
     "items. List every item as its own object. Add a 'region' field to each "
-    "object that says where the item is, for example 'top left shelf'."
+    "object with the bounding box of the item in pixels, as the four numbers "
+    "[x, y, width, height]."
 )
 
 RECEIPT_PARSE_PROMPT: Final[str] = (
@@ -71,6 +72,9 @@ class OllamaConfig:
 
     base_url: str = DEFAULT_BASE_URL
     model: str = DEFAULT_MODEL
+    #: Receipt text goes to this model. Text inference on a CPU is several
+    #: times faster than vision inference.
+    text_model: str = DEFAULT_TEXT_MODEL
     timeout: float = DEFAULT_TIMEOUT
     enabled: bool = True
 
@@ -80,6 +84,9 @@ class OllamaConfig:
         return cls(
             base_url=str(setting("ollama_url", DEFAULT_BASE_URL) or DEFAULT_BASE_URL),
             model=str(setting("ollama_vision_model", DEFAULT_MODEL) or DEFAULT_MODEL),
+            text_model=str(
+                setting("ollama_text_model", DEFAULT_TEXT_MODEL) or DEFAULT_TEXT_MODEL
+            ),
             timeout=float(
                 setting("ollama_timeout", DEFAULT_TIMEOUT) or DEFAULT_TIMEOUT
             ),
@@ -132,7 +139,7 @@ class ItemSuggestion:
     subcategory: str | None = None
     estimated_value_aud: float | None = None
     condition: str | None = None
-    region: str | None = None
+    region: tuple[int, int, int, int] | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     def to_item_payload(self) -> dict[str, Any]:
@@ -155,7 +162,7 @@ class ItemSuggestion:
             "subcategory": self.subcategory,
             "estimated_value_aud": self.estimated_value_aud,
             "condition": self.condition,
-            "region": self.region,
+            "region": list(self.region) if self.region else None,
         }
 
 
@@ -272,11 +279,9 @@ class AIService:
         if has_text:
             prompt = (
                 f"{prompt}\n\nThe OCR text of the receipt follows. Read the "
-                f"values out of it.\n\n{(raw_text or "").strip()[:6000]}"
+                f"values out of it.\n\n{(raw_text or '').strip()[:6000]}"
             )
-            response = await self.generate(
-                prompt, model=self.config.text_model
-            )
+            response = await self.generate(prompt, model=self.config.text_model)
         elif image:
             response = await self.generate(prompt, images=[image])
         else:
@@ -513,9 +518,27 @@ def parse_suggestion(entry: dict[str, Any]) -> ItemSuggestion | None:
             else entry.get("estimated_value", entry.get("value"))
         ),
         condition=normalise_condition(entry.get("condition")),
-        region=_first_string(entry, ("region", "location", "position")),
+        region=parse_region(entry),
         raw=entry,
     )
+
+
+def parse_region(entry: dict[str, Any]) -> tuple[int, int, int, int] | None:
+    """Read a bounding box of four numbers, as a bulk scan returns.
+
+    A model that answers with words instead of numbers gives no box, and the
+    client then shows the item without a highlight.
+    """
+    for key in ("region", "bbox", "box", "bounding_box"):
+        value = entry.get(key)
+        if not isinstance(value, list | tuple) or len(value) != 4:
+            continue
+        numbers = [coerce_number(part) for part in value]
+        if any(number is None for number in numbers):
+            continue
+        box = tuple(int(number) for number in numbers)  # type: ignore[arg-type]
+        return box  # type: ignore[return-value]
+    return None
 
 
 def _first_string(entry: dict[str, Any], keys: tuple[str, ...]) -> str | None:
@@ -531,7 +554,7 @@ def coerce_number(value: Any) -> float | None:
     """Read a number out of a number, or out of a string such as 'A$1,299.00'."""
     if isinstance(value, bool) or value is None:
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return float(value)
     if isinstance(value, str):
         cleaned = re.sub(r"[^0-9.\-]", "", value.replace(",", ""))
@@ -575,5 +598,6 @@ __all__ = [
     "extract_json_payload",
     "get_ai_service",
     "normalise_condition",
+    "parse_region",
     "parse_suggestion",
 ]

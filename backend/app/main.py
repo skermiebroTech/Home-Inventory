@@ -7,6 +7,7 @@ the startup migration.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -24,6 +25,8 @@ from app.config import settings
 from app.database import dispose_engine
 from app.routers import ALL_ROUTERS
 from app.schemas.common import Envelope, ErrorDetail
+from app.services.backup_service import get_backup_service
+from app.services.job_service import get_job_store
 from app.utils.errors import ApiError
 
 logging.basicConfig(
@@ -99,8 +102,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # read the log and fix it.
             logger.error("Migration failed: %s", exc)
 
+    # The scheduled backup reads its own state file, so a restart keeps the
+    # schedule that the operator set through the API.
+    backup = get_backup_service()
+    try:
+        backup.start()
+    except Exception as exc:  # noqa: BLE001 - a bad cron must not stop the service
+        logger.error("The backup scheduler did not start: %s", exc)
+
     logger.info("HomeStock %s is ready on port %s.", __version__, settings.port)
     yield
+
+    await get_job_store().shutdown()
+    await backup.shutdown()
     await dispose_engine()
 
 
@@ -154,11 +168,14 @@ async def handle_http_exception(
 async def handle_validation_error(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
+    # A model validator that raises ValueError puts the exception object in
+    # the error context. JSON cannot hold that, so every value becomes text.
+    errors = json.loads(json.dumps(exc.errors(), default=str))
     return _envelope_response(
         status.HTTP_422_UNPROCESSABLE_ENTITY,
         "validation_error",
         "The request body or query is not valid.",
-        {"errors": exc.errors()},
+        {"errors": errors},
     )
 
 

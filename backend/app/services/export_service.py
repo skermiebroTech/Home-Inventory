@@ -121,11 +121,11 @@ def _csv_value(value: Any) -> str:
         return ""
     if isinstance(value, bool):
         return "yes" if value else "no"
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime | date):
         return value.isoformat()
-    if isinstance(value, (Decimal, UUID)):
+    if isinstance(value, Decimal | UUID):
         return str(value)
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return ", ".join(str(entry) for entry in value)
     if isinstance(value, dict):
         return json.dumps(value, default=str)
@@ -522,9 +522,9 @@ def _pg_dump_command(database_url: str) -> tuple[list[str], dict[str, str]]:
 
 def _json_default(value: Any) -> str:
     """Serialise the types that JSON does not know."""
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime | date):
         return value.isoformat()
-    if isinstance(value, (UUID, Decimal, Path)):
+    if isinstance(value, UUID | Decimal | Path):
         return str(value)
     return repr(value)
 

@@ -40,6 +40,7 @@ from app.utils.queries import (
     get_location_or_404,
     paginate,
     read_upload,
+    reload_item,
     to_item_detail,
     to_item_read,
 )
@@ -118,9 +119,7 @@ def _apply_sort(statement: Select[Any], sort: str) -> Select[Any]:
     )
 
 
-async def _resolve_tags(
-    session: AsyncSession, tag_ids: list[uuid.UUID]
-) -> list[Tag]:
+async def _resolve_tags(session: AsyncSession, tag_ids: list[uuid.UUID]) -> list[Tag]:
     """Return the tag rows for a list of ids, or raise 404."""
     if not tag_ids:
         return []
@@ -134,9 +133,7 @@ async def _resolve_tags(
     return list(tags)
 
 
-async def _new_item(
-    session: AsyncSession, body: ItemCreate, user: User
-) -> Item:
+async def _new_item(session: AsyncSession, body: ItemCreate, user: User) -> Item:
     """Build one item row from a create body. The caller commits."""
     if body.location_id is not None:
         await get_location_or_404(session, body.location_id, user)
@@ -210,9 +207,7 @@ async def list_items(
         session, statement, page=page, per_page=per_page
     )
     return ok(
-        build_page(
-            [to_item_read(row) for row in rows], total, page, per_page, pages
-        )
+        build_page([to_item_read(row) for row in rows], total, page, per_page, pages)
     )
 
 
@@ -227,7 +222,7 @@ async def create_item(
 ) -> Envelope[ItemDetail]:
     item = await _new_item(session, body, user)
     await session.commit()
-    await session.refresh(item, ["photos", "tags"])
+    await reload_item(session, item)
     return ok(await to_item_detail(session, item))
 
 
@@ -256,9 +251,7 @@ async def search_items(
         session, statement, page=page, per_page=per_page
     )
     return ok(
-        build_page(
-            [to_item_read(row) for row in rows], total, page, per_page, pages
-        )
+        build_page([to_item_read(row) for row in rows], total, page, per_page, pages)
     )
 
 
@@ -275,7 +268,7 @@ async def bulk_create_items(
     await session.commit()
     details: list[ItemDetail] = []
     for item in created:
-        await session.refresh(item, ["photos", "tags"])
+        await reload_item(session, item)
         details.append(await to_item_detail(session, item))
     return ok(details)
 
@@ -344,7 +337,7 @@ async def create_item_from_barcode(
         user,
     )
     await session.commit()
-    await session.refresh(item, ["photos", "tags"])
+    await reload_item(session, item)
     return ok(await to_item_detail(session, item))
 
 
@@ -393,7 +386,7 @@ async def update_item(
     item.version += 1
 
     await session.commit()
-    await session.refresh(item, ["photos", "tags"])
+    await reload_item(session, item)
     return ok(await to_item_detail(session, item))
 
 

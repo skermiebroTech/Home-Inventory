@@ -19,7 +19,12 @@ from app.schemas.common import Envelope, ok
 from app.schemas.item import ItemDetail, ItemRead, LendRequest
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import conflict
-from app.utils.queries import get_item_or_404, to_item_detail, to_item_read
+from app.utils.queries import (
+    get_item_or_404,
+    reload_item,
+    to_item_detail,
+    to_item_read,
+)
 
 router = APIRouter(prefix="/api", tags=["Lending"])
 
@@ -74,7 +79,7 @@ async def lend_item(
     item.version += 1
 
     await session.commit()
-    await session.refresh(item, ["photos", "tags"])
+    await reload_item(session, item)
     return ok(await to_item_detail(session, item))
 
 
@@ -96,5 +101,5 @@ async def return_item(
     item.version += 1
 
     await session.commit()
-    await session.refresh(item, ["photos", "tags"])
+    await reload_item(session, item)
     return ok(await to_item_detail(session, item))

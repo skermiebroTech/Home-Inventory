@@ -14,7 +14,7 @@ from app.schemas.item import ItemDetail
 from app.schemas.tag import TagCreate, TagRead, TagUpdate
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import conflict, not_found
-from app.utils.queries import get_item_or_404, to_item_detail
+from app.utils.queries import get_item_or_404, reload_item, to_item_detail
 
 router = APIRouter(prefix="/api/tags", tags=["Tags"])
 
@@ -28,9 +28,7 @@ async def _get_tag_or_404(session: SessionDep, tag_id: uuid.UUID) -> Tag:
 
 
 @router.get("", response_model=Envelope[list[TagRead]], summary="List every tag.")
-async def list_tags(
-    user: CurrentUser, session: SessionDep
-) -> Envelope[list[TagRead]]:
+async def list_tags(user: CurrentUser, session: SessionDep) -> Envelope[list[TagRead]]:
     rows = (await session.execute(select(Tag).order_by(Tag.name))).scalars().all()
     return ok([TagRead.model_validate(row) for row in rows])
 
@@ -72,7 +70,7 @@ async def update_tag(
     tag = await _get_tag_or_404(session, tag_id)
     changes = body.model_dump(exclude_unset=True)
 
-    if "name" in changes and changes["name"]:
+    if changes.get("name"):
         name = changes["name"].strip()
         clash = await session.scalar(
             select(Tag).where(func.lower(Tag.name) == name.lower(), Tag.id != tag_id)
@@ -124,7 +122,7 @@ async def assign_tag(
         item.tags.append(tag)
         item.version += 1
         await session.commit()
-        await session.refresh(item, ["photos", "tags"])
+        await reload_item(session, item)
     return ok(await to_item_detail(session, item))
 
 
@@ -142,5 +140,5 @@ async def remove_tag(
         item.tags = remaining
         item.version += 1
         await session.commit()
-        await session.refresh(item, ["photos", "tags"])
+        await reload_item(session, item)
     return ok(await to_item_detail(session, item))

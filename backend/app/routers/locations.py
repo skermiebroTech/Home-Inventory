@@ -75,10 +75,12 @@ async def list_locations(
 
     nodes: dict[uuid.UUID, LocationNode] = {}
     for row in rows:
-        node = LocationNode.model_validate(row)
-        node.item_count = counts.get(row.id, 0)
-        node.children = []
-        nodes[row.id] = node
+        # The node is built from the flat shape. Reading `row.children` here
+        # would make the ORM load the whole subtree, one query at a time.
+        flat = LocationRead.model_validate(row)
+        nodes[row.id] = LocationNode(
+            **flat.model_dump(), children=[], item_count=counts.get(row.id, 0)
+        )
 
     roots: list[LocationNode] = []
     for row in rows:

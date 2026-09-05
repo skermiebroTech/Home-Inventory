@@ -22,6 +22,7 @@ from app.models.user import User
 from app.schemas.common import Page
 from app.schemas.item import ItemDetail, ItemPhotoRead, ItemRead
 from app.utils.errors import ApiError, not_found
+from app.utils.thumbnails import thumbnail_path_for, to_absolute
 
 T = TypeVar("T")
 
@@ -75,13 +76,11 @@ async def count_rows(session: AsyncSession, statement: Select[Any]) -> int:
     return int(await session.scalar(counter) or 0)
 
 
-def build_page(
+def build_page[T](
     items: list[T], total: int, page: int, per_page: int, pages: int
 ) -> Page[T]:
     """Wrap a list of rows in the shared page shape."""
-    return Page[T](
-        items=items, total=total, page=page, per_page=per_page, pages=pages
-    )
+    return Page[T](items=items, total=total, page=page, per_page=per_page, pages=pages)
 
 
 # --------------------------------------------------------------------------
@@ -208,9 +207,7 @@ async def location_path_names(
             anchor.c.depth + 1,
         ).where(parent.id == anchor.c.parent_id)
     )
-    rows = await session.execute(
-        select(walk.c.name).order_by(walk.c.depth.desc())
-    )
+    rows = await session.execute(select(walk.c.name).order_by(walk.c.depth.desc()))
     return [row[0] for row in rows]
 
 
@@ -230,6 +227,18 @@ async def would_create_cycle(
 # --------------------------------------------------------------------------
 # Response builders
 # --------------------------------------------------------------------------
+
+
+async def reload_item(session: AsyncSession, item: Item) -> Item:
+    """Reload one item after a write.
+
+    Two calls are needed. The first reads the columns that the database set
+    itself, such as `updated_at`. The second loads the relationships, which a
+    later attribute read could not load on its own inside async code.
+    """
+    await session.refresh(item)
+    await session.refresh(item, ["photos", "tags"])
+    return item
 
 
 def pick_primary_photo(item: Item) -> ItemPhoto | None:
@@ -271,13 +280,16 @@ async def read_upload(
     file: UploadFile, *, max_bytes: int = MAX_UPLOAD_BYTES, images_only: bool = True
 ) -> bytes:
     """Read one uploaded file into memory, with a size and a type check."""
-    if images_only and file.content_type:
-        if file.content_type.split(";")[0].strip().lower() not in IMAGE_CONTENT_TYPES:
-            raise ApiError(
-                415,
-                "unsupported_media_type",
-                f"{file.content_type} is not an image that this server accepts.",
-            )
+    if (
+        images_only
+        and file.content_type
+        and file.content_type.split(";")[0].strip().lower() not in IMAGE_CONTENT_TYPES
+    ):
+        raise ApiError(
+            415,
+            "unsupported_media_type",
+            f"{file.content_type} is not an image that this server accepts.",
+        )
     data = await file.read()
     if not data:
         raise ApiError(400, "empty_upload", "The uploaded file is empty.")
@@ -290,20 +302,119 @@ async def read_upload(
     return data
 
 
+# --------------------------------------------------------------------------
+# Export rows
+# --------------------------------------------------------------------------
+
+#: The width of the photograph that the insurance report places.
+REPORT_PHOTO_WIDTH: Final[int] = 600
+
+
+async def item_export_rows(
+    session: AsyncSession,
+    user: User | None = None,
+    *,
+    min_value: float | None = None,
+    with_photos: bool = False,
+) -> list[dict[str, Any]]:
+    """Read the live items as flat rows, for the CSV and the PDF report.
+
+    Pass `user` to limit the rows to one account. The scheduled backup passes
+    nothing, because it archives the whole installation.
+
+    The export services take plain rows, so that they stay independent of the
+    ORM models.
+    """
+    statement = select(Item).where(Item.deleted_at.is_(None))
+    if user is not None:
+        statement = statement.where(Item.user_id == user.id)
+    items = (
+        (
+            await session.execute(
+                statement.options(
+                    selectinload(Item.tags), selectinload(Item.photos)
+                ).order_by(Item.category.asc().nullslast(), Item.name.asc())
+            )
+        )
+        .scalars()
+        .unique()
+        .all()
+    )
+
+    location_query = select(Location.id, Location.name)
+    if user is not None:
+        location_query = location_query.where(Location.user_id == user.id)
+    names = {row[0]: row[1] for row in await session.execute(location_query)}
+    paths: dict[Any, str] = {}
+
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        value = (
+            item.current_value
+            if item.current_value is not None
+            else item.purchase_price
+        )
+        if min_value is not None and (value is None or float(value) < min_value):
+            continue
+
+        if item.location_id and item.location_id not in paths:
+            crumbs = await location_path_names(session, item.location_id)
+            paths[item.location_id] = " / ".join(crumbs) or names.get(
+                item.location_id, ""
+            )
+
+        row: dict[str, Any] = {
+            "id": str(item.id),
+            "name": item.name,
+            "description": item.description,
+            "category": item.category,
+            "subcategory": item.subcategory,
+            "brand": item.brand,
+            "model": item.model,
+            "serial_number": item.serial_number,
+            "barcode": item.barcode,
+            "location": paths.get(item.location_id, ""),
+            "quantity": item.quantity,
+            "condition": item.condition,
+            "purchase_price": item.purchase_price,
+            "current_value": item.current_value,
+            "purchase_date": item.purchase_date,
+            "purchase_location": item.purchase_location,
+            "warranty_expires": item.warranty_expires,
+            "is_lent": item.is_lent,
+            "lent_to": item.lent_to,
+            "lent_date": item.lent_date,
+            "tags": [tag.name for tag in item.tags],
+            "notes": item.notes,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+        }
+        if with_photos:
+            primary = pick_primary_photo(item)
+            if primary is not None:
+                photo = thumbnail_path_for(primary.file_path, REPORT_PHOTO_WIDTH)
+                row["photo_path"] = str(photo or to_absolute(primary.file_path))
+        rows.append(row)
+    return rows
+
+
 __all__ = [
     "IMAGE_CONTENT_TYPES",
     "MAX_UPLOAD_BYTES",
+    "REPORT_PHOTO_WIDTH",
     "build_page",
     "count_rows",
     "descendant_location_ids",
     "get_item_or_404",
     "get_location_or_404",
     "get_receipt_or_404",
+    "item_export_rows",
     "live",
     "location_path_names",
     "paginate",
     "pick_primary_photo",
     "read_upload",
+    "reload_item",
     "to_item_detail",
     "to_item_read",
     "would_create_cycle",

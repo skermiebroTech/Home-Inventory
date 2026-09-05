@@ -1,13 +1,17 @@
 """Delta synchronisation for the offline-first mobile application.
 
-The service is deliberately independent of the ORM model classes. The router
-builds a `SyncRegistry` that names the tables to synchronise, and this module
-reads the columns through SQLAlchemy introspection. A new table joins the sync
-by joining the registry.
+The service is independent of the model classes. A router builds a
+`SyncRegistry` that names the tables to synchronise, and this module reads the
+columns through SQLAlchemy introspection. A new table joins the sync by
+joining the registry.
 
-Conflict rule, from the architecture specification: last write wins, and the
-server is the authority. A push that carries a stale `version` or a stale
-`updated_at` is refused, and the answer holds the server record so that the
+Ownership. A table with a `user_id` column is filtered on it. A child table
+such as `item_photos` has no `user_id`, so the registry names its parent, and
+this module joins the parent to filter the reads and to check the writes.
+
+Conflicts. The architecture specification says last write wins, with the
+server as the authority. A push that carries a stale `base_version` or a stale
+timestamp is refused, and the answer names the server version so that the
 client can show the "conflict resolved" message.
 """
 
@@ -21,17 +25,18 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
-from sqlalchemy import inspect, select
+from sqlalchemy import Select, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.services.errors import ValidationError
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PAGE_SIZE: Final[int] = 500
-MAX_PAGE_SIZE: Final[int] = 2000
-MAX_PUSH_CHANGES: Final[int] = 1000
+MAX_PAGE_SIZE: Final[int] = 5000
+MAX_PUSH_CHANGES: Final[int] = 500
 
 OP_CREATE: Final[str] = "create"
 OP_UPDATE: Final[str] = "update"
@@ -40,7 +45,7 @@ VALID_OPS: Final[frozenset[str]] = frozenset({OP_CREATE, OP_UPDATE, OP_DELETE})
 
 #: Columns that a client may never write.
 PROTECTED_COLUMNS: Final[frozenset[str]] = frozenset(
-    {"id", "user_id", "created_at", "password_hash"}
+    {"id", "user_id", "created_at", "password_hash", "search_vector"}
 )
 
 
@@ -50,24 +55,33 @@ PROTECTED_COLUMNS: Final[frozenset[str]] = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
+class ParentScope:
+    """How a child table reaches the user who owns it."""
+
+    foreign_key: str
+    model: type[Any]
+    user_column: str = "user_id"
+
+
+@dataclass(frozen=True, slots=True)
 class SyncResource:
     """One table that takes part in the synchronisation."""
 
     name: str
     model: type[Any]
     user_column: str | None = "user_id"
+    parent: ParentScope | None = None
     read_only: bool = False
     exclude: frozenset[str] = frozenset()
-
-    @property
-    def mapper(self) -> Any:
-        """Return the SQLAlchemy mapper of the model."""
-        return inspect(self.model)
+    #: Relationship names to load with the row. A response schema that holds
+    #: a nested list needs them, because async code cannot load a
+    #: relationship later, when the schema reads the attribute.
+    load: tuple[str, ...] = ()
 
     @property
     def columns(self) -> dict[str, Any]:
         """Return every mapped column, by attribute name."""
-        return {attr.key: attr.columns[0] for attr in self.mapper.column_attrs}
+        return {attr.key: attr.columns[0] for attr in inspect(self.model).column_attrs}
 
     def has(self, column: str) -> bool:
         """Return True if the model has that column."""
@@ -75,10 +89,26 @@ class SyncResource:
 
     @property
     def scope_column(self) -> str | None:
-        """Return the column that holds the owner, if the model has one."""
+        """Return the owner column of this table, if it has one."""
         if self.user_column and self.has(self.user_column):
             return self.user_column
         return None
+
+    def scoped(self, statement: Select[Any], user_id: uuid.UUID | None) -> Select[Any]:
+        """Add the ownership filter to a select."""
+        if user_id is None:
+            return statement
+        column = self.scope_column
+        if column is not None:
+            return statement.where(getattr(self.model, column) == user_id)
+        if self.parent is not None:
+            parent = self.parent
+            return statement.join(
+                parent.model,
+                parent.model.id == getattr(self.model, parent.foreign_key),
+            ).where(getattr(parent.model, parent.user_column) == user_id)
+        # A shared table, such as tags. Every user of this installation sees it.
+        return statement
 
 
 class SyncRegistry:
@@ -114,76 +144,57 @@ class SyncRegistry:
 
 
 @dataclass(frozen=True, slots=True)
-class ResourceChanges:
-    """The changes of one table since the client's last sync."""
+class RowChanges:
+    """The rows of one table that changed since the client's last sync."""
 
-    updated: list[dict[str, Any]] = field(default_factory=list)
-    deleted: list[dict[str, Any]] = field(default_factory=list)
+    updated: list[Any] = field(default_factory=list)
+    deleted: list[uuid.UUID] = field(default_factory=list)
     has_more: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return the changes as a plain dictionary."""
-        return {
-            "updated": self.updated,
-            "deleted": self.deleted,
-            "has_more": self.has_more,
-        }
 
 
 @dataclass(frozen=True, slots=True)
-class SyncChanges:
-    """The answer of `GET /api/sync/changes`."""
+class PushOutcome:
+    """What the server did with one pushed change."""
 
-    server_time: datetime
-    since: datetime | None
-    resources: dict[str, ResourceChanges]
+    applied: bool
+    resource: str
+    record_id: uuid.UUID
+    op: str
+    version: int | None = None
+    conflict_reason: str | None = None
+    error: str | None = None
 
     @property
-    def has_more(self) -> bool:
-        """Return True if any table held back rows."""
-        return any(changes.has_more for changes in self.resources.values())
-
-    @property
-    def count(self) -> int:
-        """Return the number of rows in the answer."""
-        return sum(
-            len(changes.updated) + len(changes.deleted)
-            for changes in self.resources.values()
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return the answer as a plain dictionary."""
-        return {
-            "server_time": self.server_time.isoformat(),
-            "since": self.since.isoformat() if self.since else None,
-            "has_more": self.has_more,
-            "count": self.count,
-            "changes": {
-                name: changes.to_dict() for name, changes in self.resources.items()
-            },
-        }
+    def conflicted(self) -> bool:
+        """Return True if the server refused the change and kept its own row."""
+        return self.conflict_reason is not None
 
 
 @dataclass(frozen=True, slots=True)
 class PushResult:
-    """The answer of `POST /api/sync/push`."""
+    """The result of one push batch."""
 
     server_time: datetime
-    applied: list[dict[str, Any]] = field(default_factory=list)
-    conflicts: list[dict[str, Any]] = field(default_factory=list)
-    errors: list[dict[str, Any]] = field(default_factory=list)
+    outcomes: list[PushOutcome] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return the answer as a plain dictionary."""
-        return {
-            "server_time": self.server_time.isoformat(),
-            "applied": self.applied,
-            "conflicts": self.conflicts,
-            "errors": self.errors,
-            "applied_count": len(self.applied),
-            "conflict_count": len(self.conflicts),
-            "error_count": len(self.errors),
-        }
+    @property
+    def applied(self) -> list[PushOutcome]:
+        """Return the changes that the server wrote."""
+        return [outcome for outcome in self.outcomes if outcome.applied]
+
+    @property
+    def conflicts(self) -> list[PushOutcome]:
+        """Return the changes that lost to a newer server row."""
+        return [outcome for outcome in self.outcomes if outcome.conflicted]
+
+    @property
+    def errors(self) -> list[PushOutcome]:
+        """Return the changes that the server could not read."""
+        return [
+            outcome
+            for outcome in self.outcomes
+            if outcome.error is not None and not outcome.conflicted
+        ]
 
 
 # --------------------------------------------------------------------------
@@ -191,75 +202,53 @@ class PushResult:
 # --------------------------------------------------------------------------
 
 
-async def collect_changes(
+async def fetch_changes(
     session: AsyncSession,
-    registry: SyncRegistry,
+    resource: SyncResource,
     *,
     since: datetime | None = None,
     user_id: uuid.UUID | None = None,
     limit: int = DEFAULT_PAGE_SIZE,
-    resources: Sequence[str] | None = None,
-) -> SyncChanges:
-    """Return every change since `since`, table by table."""
-    page = max(1, min(limit, MAX_PAGE_SIZE))
-    moment = _utc_now()
-    wanted = [registry.get(name) for name in resources] if resources else list(registry)
+) -> RowChanges:
+    """Return the rows of one table that changed since `since`.
 
-    result: dict[str, ResourceChanges] = {}
-    for resource in wanted:
-        result[resource.name] = await _changes_for(
-            session, resource, since=since, user_id=user_id, limit=page
-        )
-    return SyncChanges(server_time=moment, since=since, resources=result)
-
-
-async def _changes_for(
-    session: AsyncSession,
-    resource: SyncResource,
-    *,
-    since: datetime | None,
-    user_id: uuid.UUID | None,
-    limit: int,
-) -> ResourceChanges:
-    """Read the changed rows of one table."""
+    A soft deleted row goes into `deleted` instead of `updated`, so that the
+    client removes it from its own database.
+    """
     model = resource.model
     if not resource.has("updated_at"):
         logger.debug("The table %s has no updated_at column.", resource.name)
-        return ResourceChanges()
+        return RowChanges()
 
-    soft_delete = resource.has("deleted_at")
-    statement = select(model)
+    page = max(1, min(limit, MAX_PAGE_SIZE))
+    statement: Select[Any] = select(model)
     if since is not None:
         statement = statement.where(model.updated_at > since)
-    scope = resource.scope_column
-    if scope and user_id is not None:
-        statement = statement.where(getattr(model, scope) == user_id)
-    statement = statement.order_by(model.updated_at.asc()).limit(limit + 1)
+    statement = resource.scoped(statement, user_id)
+    for relationship in resource.load:
+        statement = statement.options(selectinload(getattr(model, relationship)))
+    statement = statement.order_by(model.updated_at.asc(), model.id).limit(page + 1)
 
-    rows = list((await session.execute(statement)).scalars().all())
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+    rows = list((await session.execute(statement)).scalars().unique().all())
+    has_more = len(rows) > page
+    rows = rows[:page]
 
-    updated: list[dict[str, Any]] = []
-    deleted: list[dict[str, Any]] = []
+    soft_delete = resource.has("deleted_at")
+    updated: list[Any] = []
+    deleted: list[uuid.UUID] = []
     for row in rows:
         if soft_delete and getattr(row, "deleted_at", None) is not None:
-            deleted.append(
-                {
-                    "id": _json_safe(getattr(row, "id", None)),
-                    "deleted_at": _json_safe(row.deleted_at),
-                }
-            )
+            deleted.append(row.id)
         else:
-            updated.append(serialise_row(row, resource))
-    return ResourceChanges(updated=updated, deleted=deleted, has_more=has_more)
+            updated.append(row)
+    return RowChanges(updated=updated, deleted=deleted, has_more=has_more)
 
 
 def serialise_row(row: Any, resource: SyncResource) -> dict[str, Any]:
     """Turn one ORM row into a JSON-safe dictionary."""
-    hidden = resource.exclude | {"password_hash"}
+    hidden = resource.exclude | {"password_hash", "search_vector"}
     return {
-        name: _json_safe(getattr(row, name, None))
+        name: json_safe(getattr(row, name, None))
         for name in resource.columns
         if name not in hidden
     }
@@ -280,7 +269,7 @@ async def apply_push(
     """Apply the changes that the mobile application queued while offline.
 
     Every change is applied on its own. One bad change does not stop the rest:
-    it is reported in `errors`, and the client can retry it.
+    it is reported, and the client can correct it and send it again.
     """
     if len(changes) > MAX_PUSH_CHANGES:
         raise ValidationError(
@@ -288,57 +277,45 @@ async def apply_push(
             details={"received": len(changes)},
         )
 
-    applied: list[dict[str, Any]] = []
-    conflicts: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-
-    for index, change in enumerate(changes):
+    outcomes: list[PushOutcome] = []
+    for change in changes:
+        resource_name = str(change.get("resource", ""))
+        record_id = change.get("id")
         try:
-            outcome = await _apply_one(session, registry, change, user_id=user_id)
+            outcomes.append(await _apply_one(session, registry, change, user_id))
         except ValidationError as exc:
-            errors.append(
-                {
-                    "index": index,
-                    "resource": change.get("resource"),
-                    "id": change.get("id"),
-                    "message": exc.message,
-                }
+            outcomes.append(
+                PushOutcome(
+                    applied=False,
+                    resource=resource_name,
+                    record_id=_safe_uuid(record_id),
+                    op=str(change.get("op", "")),
+                    error=exc.message,
+                )
             )
-            continue
         except SQLAlchemyError as exc:
             await session.rollback()
             logger.warning("A pushed change failed: %s", exc)
-            errors.append(
-                {
-                    "index": index,
-                    "resource": change.get("resource"),
-                    "id": change.get("id"),
-                    "message": "The database refused this change.",
-                }
+            outcomes.append(
+                PushOutcome(
+                    applied=False,
+                    resource=resource_name,
+                    record_id=_safe_uuid(record_id),
+                    op=str(change.get("op", "")),
+                    error="The database refused this change.",
+                )
             )
-            continue
-
-        if outcome.get("conflict"):
-            conflicts.append(outcome["conflict"])
-        else:
-            applied.append(outcome["applied"])
 
     await session.commit()
-    return PushResult(
-        server_time=_utc_now(),
-        applied=applied,
-        conflicts=conflicts,
-        errors=errors,
-    )
+    return PushResult(server_time=utc_now(), outcomes=outcomes)
 
 
 async def _apply_one(
     session: AsyncSession,
     registry: SyncRegistry,
     change: Mapping[str, Any],
-    *,
     user_id: uuid.UUID | None,
-) -> dict[str, Any]:
+) -> PushOutcome:
     """Apply one create, update, or delete."""
     resource = registry.get(str(change.get("resource", "")))
     if resource.read_only:
@@ -350,7 +327,7 @@ async def _apply_one(
             f"'{operation}' is not an operation. Use create, update, or delete."
         )
 
-    record_id = _coerce_uuid(change.get("id"))
+    record_id = coerce_uuid(change.get("id"))
     if record_id is None:
         raise ValidationError("Every change needs an id.")
 
@@ -360,38 +337,49 @@ async def _apply_one(
 
     existing = await session.get(resource.model, record_id)
 
-    if operation == OP_DELETE:
-        return await _apply_delete(session, resource, existing, record_id, user_id)
-
     if existing is None:
-        return await _apply_create(session, resource, record_id, data, user_id)
+        if operation == OP_DELETE:
+            # The row is already gone. A repeated delete is not an error.
+            return PushOutcome(
+                applied=True, resource=resource.name, record_id=record_id, op=OP_DELETE
+            )
+        return await _create(session, resource, record_id, data, user_id)
 
-    _assert_owner(resource, existing, user_id)
-    conflict = _detect_conflict(resource, existing, change)
+    await _assert_owner(session, resource, existing, user_id)
+
+    if operation == OP_DELETE:
+        return await _delete(session, resource, existing, record_id)
+
+    conflict = _conflict_reason(resource, existing, change)
     if conflict is not None:
-        return {"conflict": conflict}
+        return PushOutcome(
+            applied=False,
+            resource=resource.name,
+            record_id=record_id,
+            op=operation,
+            version=getattr(existing, "version", None),
+            conflict_reason=conflict,
+        )
 
     _write_columns(resource, existing, data)
     _bump_version(resource, existing)
     await session.flush()
-    return {
-        "applied": {
-            "resource": resource.name,
-            "id": str(record_id),
-            "op": OP_UPDATE,
-            "version": getattr(existing, "version", None),
-            "updated_at": _json_safe(getattr(existing, "updated_at", None)),
-        }
-    }
+    return PushOutcome(
+        applied=True,
+        resource=resource.name,
+        record_id=record_id,
+        op=OP_UPDATE,
+        version=getattr(existing, "version", None),
+    )
 
 
-async def _apply_create(
+async def _create(
     session: AsyncSession,
     resource: SyncResource,
     record_id: uuid.UUID,
     data: Mapping[str, Any],
     user_id: uuid.UUID | None,
-) -> dict[str, Any]:
+) -> PushOutcome:
     """Insert a row that the client created while it was offline."""
     instance = resource.model()
     instance.id = record_id
@@ -401,65 +389,50 @@ async def _apply_create(
     _write_columns(resource, instance, data)
     if resource.has("version"):
         instance.version = 1
+
+    await _assert_owner(session, resource, instance, user_id)
     session.add(instance)
     await session.flush()
-    return {
-        "applied": {
-            "resource": resource.name,
-            "id": str(record_id),
-            "op": OP_CREATE,
-            "version": getattr(instance, "version", None),
-            "updated_at": _json_safe(getattr(instance, "updated_at", None)),
-        }
-    }
+    return PushOutcome(
+        applied=True,
+        resource=resource.name,
+        record_id=record_id,
+        op=OP_CREATE,
+        version=getattr(instance, "version", None),
+    )
 
 
-async def _apply_delete(
+async def _delete(
     session: AsyncSession,
     resource: SyncResource,
     existing: Any,
     record_id: uuid.UUID,
-    user_id: uuid.UUID | None,
-) -> dict[str, Any]:
-    """Delete a row, or mark it deleted if the table supports that."""
-    if existing is None:
-        # The row is already gone. A repeated delete is not an error.
-        return {
-            "applied": {
-                "resource": resource.name,
-                "id": str(record_id),
-                "op": OP_DELETE,
-                "version": None,
-                "updated_at": None,
-            }
-        }
-    _assert_owner(resource, existing, user_id)
+) -> PushOutcome:
+    """Delete a row, or mark it deleted if the table keeps tombstones."""
     if resource.has("deleted_at"):
-        existing.deleted_at = _utc_now()
+        existing.deleted_at = utc_now()
         _bump_version(resource, existing)
     else:
         await session.delete(existing)
     await session.flush()
-    return {
-        "applied": {
-            "resource": resource.name,
-            "id": str(record_id),
-            "op": OP_DELETE,
-            "version": getattr(existing, "version", None),
-            "updated_at": _json_safe(getattr(existing, "updated_at", None)),
-        }
-    }
+    return PushOutcome(
+        applied=True,
+        resource=resource.name,
+        record_id=record_id,
+        op=OP_DELETE,
+        version=getattr(existing, "version", None),
+    )
 
 
-def _detect_conflict(
+def _conflict_reason(
     resource: SyncResource, existing: Any, change: Mapping[str, Any]
-) -> dict[str, Any] | None:
-    """Return a conflict record if the server copy is newer than the client copy.
+) -> str | None:
+    """Return why the server keeps its own row, or None to accept the change.
 
-    The client sends the version and the timestamp that it started from. If the
-    server has moved on since then, the server copy wins.
+    The client sends the version, and the timestamp, that it started from. If
+    the server has moved on since then, the server copy wins.
     """
-    client_version = change.get("base_version", change.get("version"))
+    client_version = change.get("base_version")
     server_version = getattr(existing, "version", None)
     if (
         resource.has("version")
@@ -467,43 +440,53 @@ def _detect_conflict(
         and isinstance(server_version, int)
         and client_version < server_version
     ):
-        return _conflict(resource, existing, "The server record is a newer version.")
+        return (
+            f"The server holds version {server_version}. "
+            f"The client edited version {client_version}."
+        )
 
-    client_updated = _coerce_datetime(
-        change.get("base_updated_at", change.get("updated_at"))
-    )
+    client_updated = coerce_datetime(change.get("base_updated_at"))
     server_updated = getattr(existing, "updated_at", None)
     if (
         client_updated is not None
         and isinstance(server_updated, datetime)
-        and _aware(server_updated) > _aware(client_updated)
+        and aware(server_updated) > aware(client_updated)
     ):
-        return _conflict(
-            resource, existing, "The server record changed after the client copy."
-        )
+        return "The server record changed after the client copy was made."
     return None
 
 
-def _conflict(resource: SyncResource, existing: Any, reason: str) -> dict[str, Any]:
-    """Build one conflict record for the answer."""
-    return {
-        "resource": resource.name,
-        "id": str(getattr(existing, "id", "")),
-        "reason": reason,
-        "resolution": "server_wins",
-        "server": serialise_row(existing, resource),
-    }
-
-
-def _assert_owner(
-    resource: SyncResource, instance: Any, user_id: uuid.UUID | None
+async def _assert_owner(
+    session: AsyncSession,
+    resource: SyncResource,
+    instance: Any,
+    user_id: uuid.UUID | None,
 ) -> None:
-    """Refuse a change to a record of another user."""
-    scope = resource.scope_column
-    if not scope or user_id is None:
+    """Refuse a change to a record that belongs to another user."""
+    if user_id is None:
         return
-    owner = getattr(instance, scope, None)
-    if owner is not None and str(owner) != str(user_id):
+
+    column = resource.scope_column
+    if column is not None:
+        owner = getattr(instance, column, None)
+        if owner is not None and str(owner) != str(user_id):
+            raise ValidationError("This record belongs to another user.")
+        return
+
+    parent = resource.parent
+    if parent is None:
+        # A shared table, such as tags.
+        return
+
+    parent_id = getattr(instance, parent.foreign_key, None)
+    if parent_id is None:
+        raise ValidationError(
+            f"This change needs a {parent.foreign_key} that names an existing row."
+        )
+    owner_row = await session.get(parent.model, parent_id)
+    if owner_row is None:
+        raise ValidationError(f"No row matches {parent.foreign_key} {parent_id}.")
+    if str(getattr(owner_row, parent.user_column, "")) != str(user_id):
         raise ValidationError("This record belongs to another user.")
 
 
@@ -518,15 +501,14 @@ def _write_columns(
         column = columns.get(key)
         if column is None:
             continue
-        setattr(instance, key, _coerce(value, column))
+        setattr(instance, key, coerce(value, column))
 
 
 def _bump_version(resource: SyncResource, instance: Any) -> None:
     """Raise the version counter by one."""
     if not resource.has("version"):
         return
-    current = getattr(instance, "version", None)
-    instance.version = (current or 0) + 1
+    instance.version = (getattr(instance, "version", None) or 0) + 1
 
 
 # --------------------------------------------------------------------------
@@ -534,7 +516,7 @@ def _bump_version(resource: SyncResource, instance: Any) -> None:
 # --------------------------------------------------------------------------
 
 
-def _coerce(value: Any, column: Any) -> Any:
+def coerce(value: Any, column: Any) -> Any:
     """Turn a JSON value into the Python type that the column needs."""
     if value is None:
         return None
@@ -544,15 +526,15 @@ def _coerce(value: Any, column: Any) -> Any:
         return value
 
     if python_type is uuid.UUID:
-        return _coerce_uuid(value)
+        return coerce_uuid(value)
     if python_type is datetime:
-        return _coerce_datetime(value)
+        return coerce_datetime(value)
     if python_type is date:
-        return _coerce_date(value)
+        return coerce_date(value)
     if python_type is Decimal:
-        return _coerce_decimal(value)
+        return coerce_decimal(value)
     if python_type is bool:
-        return _coerce_bool(value)
+        return coerce_bool(value)
     if python_type is int and not isinstance(value, bool):
         try:
             return int(value)
@@ -568,7 +550,7 @@ def _coerce(value: Any, column: Any) -> Any:
     return value
 
 
-def _coerce_uuid(value: Any) -> uuid.UUID | None:
+def coerce_uuid(value: Any) -> uuid.UUID | None:
     """Read a UUID out of a UUID or a string."""
     if value is None:
         return None
@@ -580,24 +562,31 @@ def _coerce_uuid(value: Any) -> uuid.UUID | None:
         raise ValidationError(f"'{value}' is not a UUID.") from exc
 
 
-def _coerce_datetime(value: Any) -> datetime | None:
+def _safe_uuid(value: Any) -> uuid.UUID:
+    """Return a UUID for a report line, even when the client sent nonsense."""
+    try:
+        return coerce_uuid(value) or uuid.UUID(int=0)
+    except ValidationError:
+        return uuid.UUID(int=0)
+
+
+def coerce_datetime(value: Any) -> datetime | None:
     """Read a timestamp out of a datetime or an ISO 8601 string."""
     if value is None:
         return None
     if isinstance(value, datetime):
         return value
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return datetime.fromtimestamp(float(value), tz=UTC)
     if isinstance(value, str):
-        text = value.strip().replace("Z", "+00:00")
         try:
-            return datetime.fromisoformat(text)
+            return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValidationError(f"'{value}' is not a timestamp.") from exc
     raise ValidationError(f"'{value}' is not a timestamp.")
 
 
-def _coerce_date(value: Any) -> date | None:
+def coerce_date(value: Any) -> date | None:
     """Read a date out of a date, a datetime, or an ISO 8601 string."""
     if value is None:
         return None
@@ -613,7 +602,7 @@ def _coerce_date(value: Any) -> date | None:
     raise ValidationError(f"'{value}' is not a date.")
 
 
-def _coerce_decimal(value: Any) -> Decimal | None:
+def coerce_decimal(value: Any) -> Decimal | None:
     """Read a decimal amount."""
     if value is None:
         return None
@@ -625,43 +614,36 @@ def _coerce_decimal(value: Any) -> Decimal | None:
         raise ValidationError(f"'{value}' is not an amount.") from exc
 
 
-def _coerce_bool(value: Any) -> bool:
+def coerce_bool(value: Any) -> bool:
     """Read a true or false value."""
     if isinstance(value, bool):
         return value
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         return bool(value)
     return str(value).strip().lower() in ("true", "1", "yes", "on")
 
 
-def _json_safe(value: Any) -> Any:
+def json_safe(value: Any) -> Any:
     """Turn a database value into something that JSON accepts."""
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime | date):
         return value.isoformat()
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, Decimal):
         return float(value)
-    if isinstance(value, (bytes, bytearray)):
+    if isinstance(value, bytes | bytearray):
         return value.decode("utf-8", "replace")
     return value
 
 
-def _aware(moment: datetime) -> datetime:
+def aware(moment: datetime) -> datetime:
     """Return a timestamp with a time zone. Naive input counts as UTC."""
     return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
-def _utc_now() -> datetime:
+def utc_now() -> datetime:
     """Return the current time in UTC."""
     return datetime.now(UTC)
-
-
-def parse_since(value: str | datetime | None) -> datetime | None:
-    """Read the `since` query parameter of `GET /api/sync/changes`."""
-    if value is None or value == "":
-        return None
-    return _coerce_datetime(value)
 
 
 __all__ = [
@@ -671,13 +653,16 @@ __all__ = [
     "OP_CREATE",
     "OP_DELETE",
     "OP_UPDATE",
+    "ParentScope",
+    "PushOutcome",
     "PushResult",
-    "ResourceChanges",
-    "SyncChanges",
+    "RowChanges",
     "SyncRegistry",
     "SyncResource",
     "apply_push",
-    "collect_changes",
-    "parse_since",
+    "coerce_datetime",
+    "fetch_changes",
+    "json_safe",
     "serialise_row",
+    "utc_now",
 ]
