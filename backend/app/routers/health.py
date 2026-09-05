@@ -1,0 +1,140 @@
+"""Health and dashboard routes.
+
+The health route is the only route that Phase 1 implements. The Compose
+healthcheck and the Unraid Docker page both read it, so it must work before
+any business logic exists.
+"""
+
+from __future__ import annotations
+
+import shutil
+import time
+
+import httpx
+from fastapi import APIRouter, Response, status
+from sqlalchemy import func, select, text
+
+from app import __version__
+from app.config import settings
+from app.models.user import User
+from app.schemas.common import Envelope, ok
+from app.schemas.dashboard import DashboardSummary
+from app.schemas.health import ComponentHealth, DiskUsage, HealthStatus
+from app.utils.auth import CurrentUser, SessionDep
+from app.utils.errors import not_implemented
+
+router = APIRouter(prefix="/api", tags=["Health"])
+
+
+async def _check_database(session: SessionDep) -> tuple[ComponentHealth, bool]:
+    """Return the database health, and whether a user account exists."""
+    start = time.perf_counter()
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception as exc:
+        return (
+            ComponentHealth(ok=False, detail=f"{type(exc).__name__}: {exc}"),
+            False,
+        )
+    latency = int((time.perf_counter() - start) * 1000)
+
+    # The table is missing until Alembic has run. That is not a failure.
+    try:
+        count = await session.scalar(select(func.count()).select_from(User))
+        has_user = bool(count)
+        detail = None
+    except Exception:
+        await session.rollback()
+        has_user = False
+        detail = "Connected, but the schema is not migrated yet."
+
+    return ComponentHealth(ok=True, detail=detail, latency_ms=latency), has_user
+
+
+async def _check_ollama() -> ComponentHealth:
+    """Ask Ollama for its model list."""
+    if not settings.ai_enabled:
+        return ComponentHealth(ok=False, detail="HS_AI_ENABLED is false.")
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(f"{settings.ollama_url.rstrip('/')}/api/tags")
+            response.raise_for_status()
+    except Exception as exc:
+        return ComponentHealth(ok=False, detail=f"{type(exc).__name__}: {exc}")
+    latency = int((time.perf_counter() - start) * 1000)
+    return ComponentHealth(ok=True, latency_ms=latency)
+
+
+def _check_disk() -> DiskUsage | None:
+    """Measure free space on the data volume."""
+    try:
+        usage = shutil.disk_usage(settings.data_dir)
+    except OSError:
+        return None
+    percent = (usage.used / usage.total * 100) if usage.total else 0.0
+    return DiskUsage(
+        path=str(settings.data_dir),
+        total_bytes=usage.total,
+        used_bytes=usage.used,
+        free_bytes=usage.free,
+        percent_used=round(percent, 2),
+    )
+
+
+@router.get(
+    "/health",
+    response_model=Envelope[HealthStatus],
+    summary="Report the state of the service and its dependencies.",
+    description=(
+        "The status is ``ok`` when the database answers and the AI is "
+        "reachable, ``degraded`` when only the AI is down, and ``error`` "
+        "when the database is down. The Compose healthcheck treats "
+        "``degraded`` as healthy, because the AI is optional."
+    ),
+)
+async def health(session: SessionDep, response: Response) -> Envelope[HealthStatus]:
+    database, has_user = await _check_database(session)
+    ollama = await _check_ollama()
+
+    if not database.ok:
+        status_text = "error"
+        # The Compose healthcheck and the Unraid Docker page both watch the
+        # HTTP status. A body that says "error" under a 200 reply would keep
+        # the container marked healthy while it cannot serve a single request.
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    elif not ollama.ok:
+        # The AI is optional. The service still works without it, so this
+        # stays a 200 reply.
+        status_text = "degraded"
+    else:
+        status_text = "ok"
+
+    return ok(
+        HealthStatus(
+            status=status_text,
+            version=__version__,
+            database=database,
+            ollama=ollama,
+            disk=_check_disk(),
+            secret_key_is_default=settings.secret_key_is_default,
+            setup_required=not has_user,
+        )
+    )
+
+
+@router.get(
+    "/dashboard",
+    response_model=Envelope[DashboardSummary],
+    tags=["Dashboard"],
+    summary="Return the totals for the dashboard page.",
+    description=(
+        "This route is not in the original route list. The dashboard needs "
+        "seven counts, and one aggregate query is cheaper than seven list "
+        "calls from the browser."
+    ),
+)
+async def dashboard(
+    user: CurrentUser, session: SessionDep
+) -> Envelope[DashboardSummary]:
+    not_implemented("GET /api/dashboard")

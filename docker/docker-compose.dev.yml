@@ -1,0 +1,27 @@
+# Development overlay. Use it with the main compose file:
+#
+#   docker compose -f docker/docker-compose.yml \
+#                  -f docker/docker-compose.dev.yml up
+#
+# The backend reloads on every save. Run the web interface with Vite on the
+# host, and point it at http://localhost:7850.
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    volumes:
+      - ../backend:/app/backend
+      - ../scripts:/app/scripts
+      - ../data/uploads:/data/uploads
+      - ../data/backups:/data/backups
+      - ../data/config:/data/config
+    environment:
+      HS_LOG_LEVEL: debug
+      HS_STATIC_DIR: /app/static-missing
+
+  postgres:
+    # Exposed on the host during development, so a GUI client can connect.
+    ports:
+      - "5433:5432"

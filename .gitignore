@@ -1,0 +1,55 @@
+# --- Environment ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# --- Mobile / Expo ---
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# --- Runtime data (never commit) ---
+data/
+uploads/
+backups/
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>HomeInventory</Name>
+  <Repository>ghcr.io/YOUR_USERNAME/home-inventory:latest</Repository>
+  <Registry>https://ghcr.io/YOUR_USERNAME/home-inventory</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Latest stable release</TagDescription>
+  </Branch>
+  <Branch>
+    <Tag>beta</Tag>
+    <TagDescription>Beta release with newest features</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/YOUR_USERNAME/home-inventory/issues</Support>
+  <Project>https://github.com/YOUR_USERNAME/home-inventory</Project>
+  <Overview>
+    Self-hosted home inventory system with AI image recognition, receipt scanning,
+    mobile app sync, QR/NFC labels, warranty tracking, and insurance reports.
+
+    REQUIRES A POSTGRESQL 16 DATABASE. Install the official PostgreSQL 16 container
+    from Community Applications first, create a database, then put its connection
+    string in the Database URL field below. This container does not run its own
+    database, so it maps no database path.
+
+    AI FEATURES ARE OPTIONAL AND RUN ON THE CPU. If you have no Ollama container,
+    leave the AI Enabled field set to false. The inventory works without it.
+    If you do run Ollama, pull a small vision model first:
+    "ollama pull moondream". Larger models such as llava:7b take one to two
+    minutes per image on a CPU.
+  </Overview>
+  <Category>HomeAutomation: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:7850]</WebUI>
+  <Icon>https://raw.githubusercontent.com/YOUR_USERNAME/home-inventory/main/icon.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <DonateText/>
+  <DonateLink/>
+
+  <Config Name="Web UI Port" Target="7850" Default="7850" Mode="tcp"
+    Description="The port that the web interface and the API listen on."
+    Type="Port" Display="always" Required="true">7850</Config>
+
+  <Config Name="Uploads" Target="/data/uploads" Default="/mnt/user/appdata/home-inventory/uploads"
+    Description="Item photographs and receipt images."
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/uploads</Config>
+
+  <Config Name="Backups" Target="/data/backups" Default="/mnt/user/appdata/home-inventory/backups"
+    Description="Scheduled backup archives are written here."
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/backups</Config>
+
+  <Config Name="Config" Target="/data/config" Default="/mnt/user/appdata/home-inventory/config"
+    Description="Application settings that the web interface writes."
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/config</Config>
+
+  <Config Name="Database URL" Target="HS_DATABASE_URL"
+    Default="postgresql+asyncpg://homestock:CHANGE_ME@192.168.1.10:5432/homestock"
+    Description="The PostgreSQL 16 connection string. Use the IP address of your PostgreSQL container, not localhost."
+    Type="Variable" Display="always" Required="true">postgresql+asyncpg://homestock:CHANGE_ME@192.168.1.10:5432/homestock</Config>
+
+  <Config Name="Secret Key" Target="HS_SECRET_KEY" Default="CHANGE_ME_TO_RANDOM_STRING"
+    Description="Signs the login tokens. Generate one with: openssl rand -hex 32"
+    Type="Variable" Display="always" Required="true" Mask="true">CHANGE_ME_TO_RANDOM_STRING</Config>
+
+  <Config Name="AI Enabled" Target="HS_AI_ENABLED" Default="false"
+    Description="Set to true only if you run an Ollama container. The inventory works without it."
+    Type="Variable" Display="always" Required="false">false</Config>
+
+  <Config Name="Ollama URL" Target="HS_OLLAMA_URL" Default="http://host.docker.internal:11434"
+    Description="The address of your Ollama container."
+    Type="Variable" Display="always" Required="false">http://host.docker.internal:11434</Config>
+
+  <Config Name="Vision Model" Target="HS_OLLAMA_VISION_MODEL" Default="moondream"
+    Description="Identifies items in a photograph. This server has no GPU, so moondream (1.8B) is the default. llava-phi3 is more accurate and slower."
+    Type="Variable" Display="advanced" Required="false">moondream</Config>
+
+  <Config Name="Text Model" Target="HS_OLLAMA_TEXT_MODEL" Default="llama3.2:3b"
+    Description="Structures the receipt text that Tesseract reads."
+    Type="Variable" Display="advanced" Required="false">llama3.2:3b</Config>
+
+  <Config Name="AI Inline Timeout" Target="HS_AI_INLINE_TIMEOUT" Default="8"
+    Description="Seconds to hold an AI request open before it becomes a background job."
+    Type="Variable" Display="advanced" Required="false">8</Config>
+
+  <Config Name="CORS Origins" Target="HS_CORS_ORIGINS" Default="*"
+    Description="Comma separated list of allowed origins. Leave as * for a home network."
+    Type="Variable" Display="advanced" Required="false">*</Config>
+
+  <Config Name="Log Level" Target="HS_LOG_LEVEL" Default="info"
+    Description="One of: debug, info, warning, error."
+    Type="Variable" Display="advanced" Required="false">info</Config>
+
+  <Config Name="PUID" Target="PUID" Default="99"
+    Description="The user id that owns the mapped files. Unraid uses 99."
+    Type="Variable" Display="advanced" Required="false">99</Config>
+
+  <Config Name="PGID" Target="PGID" Default="100"
+    Description="The group id that owns the mapped files. Unraid uses 100."
+    Type="Variable" Display="advanced" Required="false">100</Config>
+
+  <Config Name="TZ" Target="TZ" Default="Australia/Brisbane"
+    Description="The time zone for dates and for the backup schedule."
+    Type="Variable" Display="always" Required="false">Australia/Brisbane</Config>
+</Container>

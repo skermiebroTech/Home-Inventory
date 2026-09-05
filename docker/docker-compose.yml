@@ -1,0 +1,118 @@
+# HomeStock stack: the application, PostgreSQL, and Ollama.
+#
+#   cp .env.example .env      # then change HS_SECRET_KEY
+#   docker compose -f docker/docker-compose.yml up -d
+#
+# The server has no GPU. Ollama runs on the CPU, so pull a small vision model
+# before the first AI request:
+#
+#   docker compose -f docker/docker-compose.yml --profile setup up ollama-init
+#
+# To use an Ollama instance that already runs on Unraid, set HS_OLLAMA_URL in
+# .env and start only the two services you need:
+#
+#   docker compose -f docker/docker-compose.yml up -d app postgres
+
+name: homestock
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/YOUR_USERNAME/home-inventory:latest
+    container_name: homestock
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    ports:
+      - "${HS_PORT:-7850}:7850"
+    volumes:
+      - ${HOST_UPLOADS_DIR:-../data/uploads}:/data/uploads
+      - ${HOST_BACKUPS_DIR:-../data/backups}:/data/backups
+      - ${HOST_CONFIG_DIR:-../data/config}:/data/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The route answers 503 while the database is unreachable, so this
+      # check fails until the stack is genuinely usable. A missing Ollama
+      # returns 200 with the status "degraded", because the AI is optional.
+      test: ["CMD", "curl", "-fsS", "http://localhost:7850/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: homestock-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-homestock}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-homestock}
+      POSTGRES_DB: ${POSTGRES_DB:-homestock}
+      # PostgreSQL refuses to start when its data directory is the mount
+      # point itself and the mount holds anything else. A subdirectory avoids
+      # that, and it matters on an Unraid share.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${HOST_DB_DIR:-../data/db}:/var/lib/postgresql/data
+    # No ports block. The database is reachable only inside this network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-homestock} -d ${POSTGRES_DB:-homestock}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: homestock-ollama
+    restart: unless-stopped
+    environment:
+      # This host has no GPU. Every setting below tunes CPU inference.
+      # One model at a time keeps the memory footprint small.
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      # Keep the model in RAM between requests. Loading a model from disk on
+      # every call would add more delay than the inference itself.
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-30m}"
+      OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-}"
+    volumes:
+      - ollama-models:/root/.ollama
+    # No ports block. Only the app container calls Ollama.
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  # A one-shot helper that downloads the models. It is not part of the normal
+  # stack, so it sits behind a profile:
+  #   docker compose --profile setup up ollama-init
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: homestock-ollama-init
+    profiles: ["setup"]
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        echo "Pulling ${HS_OLLAMA_VISION_MODEL:-moondream} (vision)..." &&
+        ollama pull "${HS_OLLAMA_VISION_MODEL:-moondream}" &&
+        echo "Pulling ${HS_OLLAMA_TEXT_MODEL:-llama3.2:3b} (text)..." &&
+        ollama pull "${HS_OLLAMA_TEXT_MODEL:-llama3.2:3b}" &&
+        echo "Done."
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  ollama-models:
