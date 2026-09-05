@@ -10,7 +10,8 @@
  */
 
 import { Ionicons } from '@expo/vector-icons'
-import { CameraView, useCameraPermissions } from 'expo-camera'
+import { CameraView, type CameraType, useCameraPermissions } from 'expo-camera'
+import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { useRef, useState } from 'react'
 import { Alert, Image, Pressable, ScrollView, View } from 'react-native'
@@ -47,6 +48,7 @@ export default function Scan() {
   const camera = useRef<CameraView>(null)
   const [permission, requestPermission] = useCameraPermissions()
   const [mode, setMode] = useState<Mode>('photo')
+  const [facing, setFacing] = useState<CameraType>('back')
   const [busy, setBusy] = useState<string | null>(null)
   const [locked, setLocked] = useState(false)
   // One item often needs several photographs: the item, its label, and its
@@ -87,11 +89,29 @@ export default function Scan() {
   const shoot = async (): Promise<void> => {
     const shot = await camera.current?.takePictureAsync({ quality: 0.7 })
     if (!shot) return
+    await keep(shot.uri)
+  }
+
+  /**
+   * Open the camera application of the phone.
+   *
+   * This window has one lens and it cannot focus on a label held close. The
+   * camera application of the phone offers every lens, the macro mode, and
+   * tap to focus, so a close picture goes through it.
+   */
+  const shootWithThePhone = async (): Promise<void> => {
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7 })
+    if (result.canceled || !result.assets[0]) return
+    await keep(result.assets[0].uri)
+  }
+
+  /** Send a receipt straight up. Every other picture joins the tray. */
+  const keep = async (uri: string): Promise<void> => {
     if (mode === 'receipt') {
-      await sendReceipt(shot.uri)
+      await sendReceipt(uri)
       return
     }
-    setShots((current) => [...current, shot.uri])
+    setShots((current) => [...current, uri])
   }
 
   const sendReceipt = async (uri: string): Promise<void> => {
@@ -216,7 +236,8 @@ export default function Scan() {
         <CameraView
           ref={camera}
           style={{ flex: 1 }}
-          facing="back"
+          facing={facing}
+          autofocus="on"
           barcodeScannerSettings={{
             barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'qr'],
           }}
@@ -337,7 +358,30 @@ export default function Scan() {
                 gap: spacing.lg,
               }}
             >
-              <View style={{ width: 104 }} />
+              <View style={{ width: 104, flexDirection: 'row', gap: spacing.sm }}>
+                <Pressable
+                  onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}
+                  accessibilityLabel="Change the camera"
+                  style={{
+                    backgroundColor: '#000000aa',
+                    borderRadius: 999,
+                    padding: 12,
+                  }}
+                >
+                  <Ionicons name="camera-reverse" size={20} color="#ffffff" />
+                </Pressable>
+                <Pressable
+                  onPress={() => void shootWithThePhone()}
+                  accessibilityLabel="Use the camera application of the phone"
+                  style={{
+                    backgroundColor: '#000000aa',
+                    borderRadius: 999,
+                    padding: 12,
+                  }}
+                >
+                  <Ionicons name="phone-portrait" size={20} color="#ffffff" />
+                </Pressable>
+              </View>
               <Pressable
                 onPress={() => void shoot()}
                 disabled={busy !== null}
@@ -365,7 +409,7 @@ export default function Scan() {
               <View style={{ alignItems: 'center' }}>
                 <Caption tone="#ffffffcc">
                   {shots.length === 0
-                    ? 'Take the item, its label, and its box.'
+                    ? 'Take the item, its label, and its box. For a close label, use the phone button.'
                     : 'Tap a picture to drop it.'}
                 </Caption>
               </View>

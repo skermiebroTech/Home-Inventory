@@ -8,7 +8,7 @@ import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
 import { mediaUrl } from '@/api/client'
 import { Badge, Body, Caption, EmptyState, Input, Screen } from '@/components/ui'
-import { getItemPhotos, listItems, type LocalItem } from '@/db'
+import { listItems, type LocalItem } from '@/db'
 import { formatMoney } from '@/lib/format'
 import { useSyncStore } from '@/store/sync'
 import { radius, spacing, useTheme } from '@/theme'
@@ -19,18 +19,11 @@ export default function Items() {
   const sync = useSyncStore()
   const [search, setSearch] = useState('')
   const [rows, setRows] = useState<LocalItem[]>([])
-  const [thumbs, setThumbs] = useState<Record<string, string | undefined>>({})
 
   const load = useCallback(async (term: string) => {
-    const items = await listItems({ search: term, limit: 300 })
-    setRows(items)
-    const map: Record<string, string | undefined> = {}
-    for (const item of items.slice(0, 60)) {
-      const photos = await getItemPhotos(item.id)
-      const first = photos[0]
-      map[item.id] = mediaUrl(first?.thumbnail_path ?? first?.file_path)
-    }
-    setThumbs(map)
+    // The query brings the thumbnail with each row, so a long list needs one
+    // read and not one for each item.
+    setRows(await listItems({ search: term, limit: 300 }))
   }, [])
 
   useFocusEffect(
@@ -91,9 +84,9 @@ export default function Items() {
               backgroundColor: pressed ? theme.border : 'transparent',
             })}
           >
-            {thumbs[item.id] ? (
+            {item.thumbnail_path ? (
               <Image
-                source={{ uri: thumbs[item.id] }}
+                source={{ uri: mediaUrl(item.thumbnail_path) }}
                 style={{ width: 46, height: 46, borderRadius: radius.sm }}
                 contentFit="cover"
                 transition={120}

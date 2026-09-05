@@ -3,6 +3,8 @@
 import type { Condition, ItemDetail, ItemWrite } from '@/api/types'
 import { useState } from 'react'
 
+import { useOwners } from '@/hooks/usePhotos'
+
 import { LocationSelect, TagPicker } from './pickers'
 import { Button, Field, Input, Select, Textarea } from './ui'
 
@@ -31,6 +33,7 @@ export function emptyItem(overrides: Partial<ItemFormValues> = {}): ItemFormValu
     condition: null,
     quantity: 1,
     notes: null,
+    owner: null,
     tag_ids: [],
     ...overrides,
   }
@@ -55,6 +58,7 @@ export function itemToValues(item: ItemDetail): ItemFormValues {
     condition: item.condition,
     quantity: item.quantity,
     notes: item.notes,
+    owner: item.owner,
     tag_ids: item.tags.map((tag) => tag.id),
   }
 }
@@ -77,6 +81,7 @@ export default function ItemForm({
   extra?: React.ReactNode
 }) {
   const [showMore, setShowMore] = useState(false)
+  const { data: owners } = useOwners()
   const set = <K extends keyof ItemFormValues>(key: K, value: ItemFormValues[K]) =>
     onChange({ ...values, [key]: value })
 
@@ -120,6 +125,19 @@ export default function ItemForm({
         </Field>
         <Field label="Category">
           <Input value={values.category ?? ''} onChange={text('category')} placeholder="Tools" />
+        </Field>
+        <Field label="Owner" hint="The person in the house whose thing this is.">
+          <Input
+            list="item-owners"
+            value={values.owner ?? ''}
+            onChange={text('owner')}
+            placeholder="Joel"
+          />
+          <datalist id="item-owners">
+            {(owners ?? []).map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </Field>
         <Field label="Condition">
           <Select

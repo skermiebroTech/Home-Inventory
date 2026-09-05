@@ -9,12 +9,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.activity import ActivityRow
 from app.schemas.cable import CableRow
 from app.schemas.component import ComponentRead, ItemComponentRow, SpareRow
 from app.schemas.custom_field import CustomFieldRead
 from app.schemas.item import ItemPhotoRead, ItemRead
 from app.schemas.location import LocationRead
 from app.schemas.maintenance import MaintenanceRead
+from app.schemas.photo import PhotoRow
 from app.schemas.receipt import ReceiptRead
 from app.schemas.tag import TagRead
 
@@ -33,6 +35,8 @@ class SyncEntity(StrEnum):
     ITEM_COMPONENT = "item_component"
     SPARE = "spare"
     CABLE = "cable"
+    PHOTO = "photo"
+    ACTIVITY = "activity"
 
 
 class SyncOp(StrEnum):
@@ -66,6 +70,8 @@ class SyncChanges(BaseModel):
     item_components: list[ItemComponentRow] = Field(default_factory=list)
     spares: list[SpareRow] = Field(default_factory=list)
     cables: list[CableRow] = Field(default_factory=list)
+    photos: list[PhotoRow] = Field(default_factory=list)
+    activity: list[ActivityRow] = Field(default_factory=list)
     deleted: dict[SyncEntity, list[uuid.UUID]] = Field(default_factory=dict)
     has_more: bool = Field(
         default=False,

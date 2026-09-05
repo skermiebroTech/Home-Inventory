@@ -2,6 +2,7 @@
 
 import { api, download, request } from './client'
 import type {
+  ActivityLine,
   AiJob,
   Cable,
   CableQuery,
@@ -32,6 +33,7 @@ import type {
   MaintenanceWrite,
   Message,
   NfcLookup,
+  OwnerPhoto,
   NfcTag,
   Page,
   Receipt,
@@ -72,6 +74,10 @@ export const items = {
   },
   deletePhoto: (id: string, photoId: string) =>
     api.delete<Message>(`/api/items/${id}/photos/${photoId}`),
+  setPrimaryPhoto: (id: string, photoId: string) =>
+    api.put<ItemPhoto[]>(`/api/items/${id}/photos/${photoId}/primary`, undefined),
+  owners: () => api.get<string[]>('/api/items/owners'),
+  activity: (id: string) => api.get<ActivityLine[]>(`/api/items/${id}/activity`),
   lookupBarcode: (code: string) =>
     api.get<BarcodeProduct>(`/api/items/barcode/${encodeURIComponent(code)}`),
   createFromBarcode: (code: string, query: { location_id?: string; quantity?: number } = {}) =>
@@ -236,6 +242,27 @@ export const cables = {
   update: (id: string, body: Partial<CableWrite>) =>
     api.put<Cable>(`/api/cables/${id}`, body),
   remove: (id: string) => api.delete<Message>(`/api/cables/${id}`),
+}
+
+// --- Photographs of a component or a cable, and the activity log ---
+
+export const photos = {
+  list: (owner: 'components' | 'cables', ownerId: string) =>
+    api.get<OwnerPhoto[]>(`/api/${owner}/${ownerId}/photos`),
+  upload: (owner: 'components' | 'cables', ownerId: string, files: File[]) => {
+    const form = new FormData()
+    for (const file of files) form.append('files', file)
+    return api.upload<OwnerPhoto[]>(`/api/${owner}/${ownerId}/photos`, form)
+  },
+  setPrimary: (photoId: string) =>
+    api.put<OwnerPhoto[]>(`/api/photos/${photoId}/primary`, undefined),
+  update: (photoId: string, body: { caption?: string | null; sort_order?: number }) =>
+    api.put<OwnerPhoto>(`/api/photos/${photoId}`, body),
+  remove: (photoId: string) => api.delete<Message>(`/api/photos/${photoId}`),
+}
+
+export const activity = {
+  recent: (limit = 50) => api.get<ActivityLine[]>('/api/activity', { limit }),
 }
 
 // --- Health, dashboard, export, and backup ---

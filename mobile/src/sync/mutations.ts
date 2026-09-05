@@ -43,6 +43,7 @@ export interface ItemDraft {
   condition?: string | null
   quantity?: number
   notes?: string | null
+  owner?: string | null
   description?: string | null
 }
 
@@ -56,6 +57,7 @@ export async function createItem(draft: ItemDraft): Promise<Item> {
     location_id: draft.location_id ?? null,
     name: draft.name,
     description: draft.description ?? null,
+    owner: draft.owner ?? null,
     category: draft.category ?? null,
     subcategory: draft.subcategory ?? null,
     brand: draft.brand ?? null,

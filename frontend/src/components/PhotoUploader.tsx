@@ -11,6 +11,8 @@ import { useRef, useState } from 'react'
 import { mediaUrl } from '@/api/client'
 import type { ItemPhoto } from '@/api/types'
 import { useDeletePhoto, useUploadPhotos } from '@/hooks/useItems'
+import { useSetPrimaryItemPhoto } from '@/hooks/usePhotos'
+import { cx } from '@/lib/format'
 import { toastError, toastOk } from '@/store/toast'
 import { Button, ConfirmDialog } from './ui'
 
@@ -23,6 +25,7 @@ export default function PhotoUploader({
 }) {
   const upload = useUploadPhotos(itemId)
   const remove = useDeletePhoto(itemId)
+  const setPrimary = useSetPrimaryItemPhoto(itemId)
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraInput = useRef<HTMLInputElement>(null)
   const [previews, setPreviews] = useState<string[]>([])
@@ -55,11 +58,30 @@ export default function PhotoUploader({
               loading="lazy"
               className="aspect-square w-full object-cover"
             />
-            {photo.is_primary ? (
-              <span className="absolute left-1.5 top-1.5 rounded bg-ink-950/70 p-1 text-white">
-                <Star className="h-3 w-3 fill-current" />
-              </span>
-            ) : null}
+            <button
+              type="button"
+              onClick={async () => {
+                if (photo.is_primary) return
+                try {
+                  await setPrimary.mutateAsync(photo.id)
+                  toastOk('That photograph is now the thumbnail.')
+                } catch (error) {
+                  toastError(error)
+                }
+              }}
+              title={photo.is_primary ? 'This is the thumbnail' : 'Use as the thumbnail'}
+              aria-label={
+                photo.is_primary ? 'This is the thumbnail' : 'Use as the thumbnail'
+              }
+              className={cx(
+                'absolute left-1.5 top-1.5 rounded bg-ink-950/70 p-1 text-white transition-opacity',
+                photo.is_primary
+                  ? 'opacity-100'
+                  : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+              )}
+            >
+              <Star className={cx('h-3 w-3', photo.is_primary && 'fill-current')} />
+            </button>
             {photo.ocr_text ? (
               <span
                 title="The server read text on this photograph"

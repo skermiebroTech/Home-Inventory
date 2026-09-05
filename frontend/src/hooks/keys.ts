@@ -25,4 +25,7 @@ export const keys = {
   spares: (query?: Record<string, unknown>) => ['spares', query ?? {}] as const,
   cables: (query?: Record<string, unknown>) => ['cables', query ?? {}] as const,
   cableKinds: () => ['cables', 'kinds'] as const,
+  photos: (owner: string, ownerId: string) => ['photos', owner, ownerId] as const,
+  owners: () => ['item-owners'] as const,
+  activity: (itemId: string) => ['activity', itemId] as const,
 }

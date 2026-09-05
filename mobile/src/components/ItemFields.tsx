@@ -29,6 +29,7 @@ export interface ItemFormValues {
   purchase_date: string
   warranty_expires: string
   notes: string
+  owner: string
 }
 
 export function emptyValues(overrides: Partial<ItemFormValues> = {}): ItemFormValues {
@@ -45,6 +46,7 @@ export function emptyValues(overrides: Partial<ItemFormValues> = {}): ItemFormVa
     purchase_date: '',
     warranty_expires: '',
     notes: '',
+    owner: '',
     ...overrides,
   }
 }
@@ -64,6 +66,7 @@ export function toDraft(values: ItemFormValues): ItemDraft {
     purchase_date: values.purchase_date.trim() || null,
     warranty_expires: values.warranty_expires.trim() || null,
     notes: values.notes.trim() || null,
+    owner: values.owner.trim() || null,
   }
 }
 
@@ -234,6 +237,15 @@ export default function ItemFields({
           </Field>
         </View>
       ) : null}
+
+      <Field label="Owner">
+        <Input
+          value={values.owner}
+          onChangeText={(text) => set('owner', text)}
+          placeholder="The person whose thing this is"
+          autoCapitalize="words"
+        />
+      </Field>
 
       <Field label="Notes">
         <Input

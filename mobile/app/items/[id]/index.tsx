@@ -5,20 +5,27 @@ import { Image } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, ScrollView, View } from 'react-native'
+import { Alert, Pressable, ScrollView, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 
-import { mediaUrl } from '@/api/client'
-import type { FittedComponent, ItemPhoto, MaintenanceLog } from '@/api/types'
+import { api, mediaUrl } from '@/api/client'
+import type {
+  ActivityLine,
+  FittedComponent,
+  ItemPhoto,
+  MaintenanceLog,
+} from '@/api/types'
 import { Badge, Body, Button, Caption, Card, Field, Input, Loading, Screen, Title } from '@/components/ui'
+import PhotoViewer from '@/components/PhotoViewer'
 import {
   getItem,
   getItemPhotos,
+  listActivity,
   listItemComponents,
   listMaintenance,
   type LocalItem,
 } from '@/db'
-import { daysUntil, formatDate, formatMoney } from '@/lib/format'
+import { daysUntil, formatDate, formatMoney, relativeTime } from '@/lib/format'
 import { NfcUnavailableError, scanAndRegister } from '@/lib/nfc'
 import {
   addMaintenance,
@@ -40,6 +47,8 @@ export default function ItemScreen() {
   const [photos, setPhotos] = useState<ItemPhoto[]>([])
   const [logs, setLogs] = useState<MaintenanceLog[]>([])
   const [parts, setParts] = useState<FittedComponent[]>([])
+  const [log, setLog] = useState<ActivityLine[]>([])
+  const [viewing, setViewing] = useState<number | null>(null)
   const [borrower, setBorrower] = useState('')
   const [showLend, setShowLend] = useState(false)
   const [work, setWork] = useState('')
@@ -51,6 +60,7 @@ export default function ItemScreen() {
     setPhotos(await getItemPhotos(id))
     setLogs(await listMaintenance(id))
     setParts(await listItemComponents(id))
+    setLog(await listActivity(id))
   }, [id])
 
   useFocusEffect(
@@ -108,14 +118,29 @@ export default function ItemScreen() {
 
         {photos.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
-            {photos.map((photo) => (
-              <Image
-                key={photo.id}
-                source={{ uri: mediaUrl(photo.file_path) }}
-                style={{ width: 150, height: 150, borderRadius: radius.md, margin: 4 }}
-                contentFit="cover"
-                transition={150}
-              />
+            {photos.map((photo, position) => (
+              <Pressable key={photo.id} onPress={() => setViewing(position)}>
+                <Image
+                  source={{ uri: mediaUrl(photo.file_path) }}
+                  style={{ width: 150, height: 150, borderRadius: radius.md, margin: 4 }}
+                  contentFit="cover"
+                  transition={150}
+                />
+                {photo.is_primary ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 10,
+                      left: 10,
+                      backgroundColor: '#000000aa',
+                      borderRadius: 999,
+                      padding: 4,
+                    }}
+                  >
+                    <Ionicons name="star" size={12} color="#fbbf24" />
+                  </View>
+                ) : null}
+              </Pressable>
             ))}
           </ScrollView>
         ) : null}
@@ -186,6 +211,23 @@ export default function ItemScreen() {
           </Card>
         ) : null}
 
+        {log.length > 0 ? (
+          <Card>
+            <Body weight="600">Activity</Body>
+            <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+              {log.slice(0, 12).map((line) => (
+                <View key={line.id}>
+                  <Body>{line.summary}</Body>
+                  <Caption>
+                    {relativeTime(line.created_at)}
+                    {line.actor ? ` · ${line.actor}` : ''}
+                  </Caption>
+                </View>
+              ))}
+            </View>
+          </Card>
+        ) : null}
+
         {photos.some((photo) => photo.ocr_text) ? (
           <Card>
             <Body weight="600">Text on the photographs</Body>
@@ -209,6 +251,7 @@ export default function ItemScreen() {
         <Card>
           <Detail label="Value" value={formatMoney(item.current_value ?? item.purchase_price)} />
           <Detail label="Quantity" value={String(item.quantity)} />
+          <Detail label="Owner" value={item.owner} />
           <Detail label="Category" value={item.category} />
           <Detail label="Brand and model" value={[item.brand, item.model].filter(Boolean).join(' ')} />
           <Detail label="Serial number" value={item.serial_number} />
@@ -238,7 +281,16 @@ export default function ItemScreen() {
 
             <View style={{ marginTop: spacing.sm, gap: spacing.md }}>
               {parts.map((part) => (
-                <View key={part.id}>
+                <View key={part.id} style={{ flexDirection: 'row', gap: spacing.md }}>
+                  {part.thumbnail_path ? (
+                    <Image
+                      source={{ uri: mediaUrl(part.thumbnail_path) }}
+                      style={{ width: 40, height: 40, borderRadius: radius.sm }}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : null}
+                  <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Body weight="500">
                       {part.quantity > 1 ? `${part.quantity}x ` : ''}
@@ -254,6 +306,7 @@ export default function ItemScreen() {
                     {part.price ? ' · own price' : ' · default price'}
                   </Caption>
                   {part.notes ? <Caption>{part.notes}</Caption> : null}
+                  </View>
                 </View>
               ))}
             </View>
@@ -348,6 +401,21 @@ export default function ItemScreen() {
           }}
         />
       </ScrollView>
+
+      <PhotoViewer
+        photos={photos.map((photo) => ({
+          id: photo.id,
+          file_path: photo.file_path,
+          is_primary: photo.is_primary,
+        }))}
+        index={viewing}
+        title={item.name}
+        onClose={() => setViewing(null)}
+        onSetPrimary={async (photoId) => {
+          await api.put(`/api/items/${item.id}/photos/${photoId}/primary`, {})
+          await load()
+        }}
+      />
     </Screen>
   )
 }

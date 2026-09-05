@@ -18,6 +18,7 @@ from app.schemas.maintenance import (
     MaintenanceRead,
     MaintenanceUpdate,
 )
+from app.services.activity_service import record as record_activity
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import not_found
 from app.utils.queries import get_item_or_404
@@ -111,6 +112,14 @@ async def create_item_maintenance(
     await get_item_or_404(session, item_id, user)
     log = MaintenanceLog(item_id=item_id, **body.model_dump())
     session.add(log)
+    record_activity(
+        session,
+        user=user,
+        entity_id=item_id,
+        action="serviced",
+        summary=log.description[:200],
+        detail=(f"Next due {log.next_due_date}." if log.next_due_date else None),
+    )
     await session.commit()
     await session.refresh(log)
     return ok(MaintenanceRead.model_validate(log))

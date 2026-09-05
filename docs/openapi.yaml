@@ -149,6 +149,85 @@ paths:
                 $ref: '#/components/schemas/Envelope_UserRead_'
       security:
       - HTTPBearer: []
+  /api/items/{item_id}/activity:
+    get:
+      tags:
+      - Activity
+      summary: Return the log of one item. The newest line comes first.
+      operationId: item_activity_api_items__item_id__activity_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ActivityRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/activity:
+    get:
+      tags:
+      - Activity
+      summary: Return the newest lines of the whole log.
+      operationId: recent_activity_api_activity_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Only this kind of line.
+          title: Action
+        description: Only this kind of line.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ActivityRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/items/lent:
     get:
       tags:
@@ -963,6 +1042,16 @@ paths:
             pattern: ^(new|good|fair|poor)$
           - type: 'null'
           title: Condition
+      - name: owner
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: The person who owns it.
+          title: Owner
+        description: The person who owns it.
       - name: warranty_expiring_days
         in: query
         required: false
@@ -1037,6 +1126,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/items/owners:
+    get:
+      tags:
+      - Items
+      summary: List the people who own something.
+      description: The names that the items already carry. The field is free text.
+      operationId: list_owners_api_items_owners_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_str__'
+      security:
+      - HTTPBearer: []
   /api/items/search:
     get:
       tags:
@@ -1309,6 +1414,43 @@ paths:
               $ref: '#/components/schemas/Body_upload_item_photos_api_items__item_id__photos_post'
       responses:
         '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ItemPhotoRead__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/items/{item_id}/photos/{photo_id}/primary:
+    put:
+      tags:
+      - Items
+      summary: Make this photograph the thumbnail of the item.
+      description: The other photographs of the item lose the flag.
+      operationId: set_primary_item_photo_api_items__item_id__photos__photo_id__primary_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      - name: photo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Photo Id
+      responses:
+        '200':
           description: Successful Response
           content:
             application/json:
@@ -1854,6 +1996,225 @@ paths:
           type: string
           format: uuid
           title: Cable Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/components/{component_id}/photos:
+    get:
+      tags:
+      - Photographs
+      summary: List the photographs of a component.
+      operationId: list_component_photos_api_components__component_id__photos_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Component Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_PhotoRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Photographs
+      summary: Upload one or more photographs of a component.
+      operationId: upload_component_photos_api_components__component_id__photos_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Component Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_component_photos_api_components__component_id__photos_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_PhotoRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cables/{cable_id}/photos:
+    get:
+      tags:
+      - Photographs
+      summary: List the photographs of a cable.
+      operationId: list_cable_photos_api_cables__cable_id__photos_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: cable_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cable Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_PhotoRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Photographs
+      summary: Upload one or more photographs of a cable.
+      operationId: upload_cable_photos_api_cables__cable_id__photos_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: cable_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cable Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_cable_photos_api_cables__cable_id__photos_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_PhotoRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/photos/{photo_id}/primary:
+    put:
+      tags:
+      - Photographs
+      summary: Make this photograph the thumbnail of its owner.
+      description: The other photographs of that owner lose the flag.
+      operationId: set_primary_photo_api_photos__photo_id__primary_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: photo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Photo Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_PhotoRow__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/photos/{photo_id}:
+    put:
+      tags:
+      - Photographs
+      summary: Change the caption or the order of a photograph.
+      operationId: update_photo_api_photos__photo_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: photo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Photo Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhotoUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_PhotoRow_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Photographs
+      summary: Delete one photograph and its thumbnails.
+      operationId: delete_photo_api_photos__photo_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: photo_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Photo Id
       responses:
         '200':
           description: Successful Response
@@ -2576,6 +2937,65 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    ActivityRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          format: uuid
+          title: Entity Id
+        action:
+          type: string
+          title: Action
+        summary:
+          type: string
+          title: Summary
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
+        actor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Actor
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - user_id
+      - entity_type
+      - entity_id
+      - action
+      - summary
+      - detail
+      - actor
+      - version
+      - created_at
+      - updated_at
+      title: ActivityRow
+      description: One line of the log.
     AiJob:
       properties:
         id:
@@ -2876,6 +3296,32 @@ components:
       required:
       - file
       title: Body_restore_backup_api_backup_restore_post
+    Body_upload_cable_photos_api_cables__cable_id__photos_post:
+      properties:
+        files:
+          items:
+            type: string
+            format: binary
+          type: array
+          title: Files
+          description: One or more images.
+      type: object
+      required:
+      - files
+      title: Body_upload_cable_photos_api_cables__cable_id__photos_post
+    Body_upload_component_photos_api_components__component_id__photos_post:
+      properties:
+        files:
+          items:
+            type: string
+            format: binary
+          type: array
+          title: Files
+          description: One or more images.
+      type: object
+      required:
+      - files
+      title: Body_upload_component_photos_api_components__component_id__photos_post
     Body_upload_item_photos_api_items__item_id__photos_post:
       properties:
         files:
@@ -3100,6 +3546,16 @@ components:
           - type: string
           - type: 'null'
           title: Item Name
+        thumbnail_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Thumbnail Path
+          description: The picture that stands for this cable.
+        photo_count:
+          type: integer
+          title: Photo Count
+          default: 0
       type: object
       required:
       - id
@@ -3413,6 +3869,16 @@ components:
           type: string
           format: date-time
           title: Updated At
+        thumbnail_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Thumbnail Path
+          description: The picture that stands for this component.
+        photo_count:
+          type: integer
+          title: Photo Count
+          default: 0
         fitted_count:
           type: integer
           title: Fitted Count
@@ -3516,6 +3982,16 @@ components:
           type: string
           format: date-time
           title: Updated At
+        thumbnail_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Thumbnail Path
+          description: The picture that stands for this component.
+        photo_count:
+          type: integer
+          title: Photo Count
+          default: 0
       type: object
       required:
       - id
@@ -3921,6 +4397,18 @@ components:
           - type: 'null'
       type: object
       title: Envelope[Page[ReceiptRead]]
+    Envelope_PhotoRow_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/PhotoRow'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[PhotoRow]
     Envelope_ReceiptDetail_:
       properties:
         data:
@@ -4005,6 +4493,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[UserRead]
+    Envelope_list_ActivityRow__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ActivityRow'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[ActivityRow]]
     Envelope_list_CableRead__:
       properties:
         data:
@@ -4140,6 +4643,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[list[MaintenanceRead]]
+    Envelope_list_PhotoRow__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/PhotoRow'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[PhotoRow]]
     Envelope_list_SpareRead__:
       properties:
         data:
@@ -4614,6 +5132,13 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        owner:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Owner
+          description: The person in the house who owns this item.
         tag_ids:
           items:
             type: string
@@ -4719,6 +5244,11 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        owner:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Owner
         is_lent:
           type: boolean
           title: Is Lent
@@ -4934,6 +5464,11 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        owner:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Owner
         is_lent:
           type: boolean
           title: Is Lent
@@ -5102,6 +5637,12 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        owner:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Owner
         tag_ids:
           anyOf:
           - items:
@@ -5816,6 +6357,86 @@ components:
       - name
       title: ParsedReceiptLine
       description: One line as the text model returned it.
+    PhotoRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        owner_type:
+          type: string
+          title: Owner Type
+        owner_id:
+          type: string
+          format: uuid
+          title: Owner Id
+        file_path:
+          type: string
+          title: File Path
+        thumbnail_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Thumbnail Path
+        is_primary:
+          type: boolean
+          title: Is Primary
+        sort_order:
+          type: integer
+          title: Sort Order
+        caption:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Caption
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - user_id
+      - owner_type
+      - owner_id
+      - file_path
+      - thumbnail_path
+      - is_primary
+      - sort_order
+      - caption
+      - version
+      - created_at
+      - updated_at
+      title: PhotoRow
+      description: One photograph, exactly as the table holds it. The phone reads this.
+    PhotoUpdate:
+      properties:
+        caption:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Caption
+        sort_order:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Sort Order
+      type: object
+      title: PhotoUpdate
+      description: Change one photograph.
     ReceiptDetail:
       properties:
         id:
@@ -6515,6 +7136,16 @@ components:
             $ref: '#/components/schemas/CableRow'
           type: array
           title: Cables
+        photos:
+          items:
+            $ref: '#/components/schemas/PhotoRow'
+          type: array
+          title: Photos
+        activity:
+          items:
+            $ref: '#/components/schemas/ActivityRow'
+          type: array
+          title: Activity
         deleted:
           additionalProperties:
             items:
@@ -6584,6 +7215,8 @@ components:
       - item_component
       - spare
       - cable
+      - photo
+      - activity
       title: SyncEntity
       description: The tables that the mobile application mirrors.
     SyncError:

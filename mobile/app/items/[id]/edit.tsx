@@ -35,6 +35,7 @@ function valuesOf(item: LocalItem): ItemFormValues {
     purchase_date: item.purchase_date ?? '',
     warranty_expires: item.warranty_expires ?? '',
     notes: item.notes ?? '',
+    owner: item.owner ?? '',
   })
 }
 

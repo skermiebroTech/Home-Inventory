@@ -13,6 +13,7 @@ from app.models.cable import Cable
 from app.models.item import Item
 from app.models.location import Location
 from app.models.user import User
+from app.routers.photos import count_photos, primary_thumbnails
 from app.schemas.cable import CableCreate, CableRead, CableUpdate
 from app.schemas.common import Envelope, Message, ok
 from app.utils.auth import CurrentUser, SessionDep
@@ -53,9 +54,17 @@ async def _names(session: SessionDep, user: User) -> tuple[dict, dict]:
     return {row[0]: row[1] for row in places}, {row[0]: row[1] for row in items}
 
 
-def _read(cable: Cable, places: dict, items: dict) -> CableRead:
+def _read(
+    cable: Cable,
+    places: dict,
+    items: dict,
+    thumbnails: dict[uuid.UUID, str] | None = None,
+    counts: dict[uuid.UUID, int] | None = None,
+) -> CableRead:
     """Build the reply for one cable."""
     read = CableRead.model_validate(cable)
+    read.thumbnail_path = (thumbnails or {}).get(cable.id)
+    read.photo_count = (counts or {}).get(cable.id, 0)
     read.ends = cable.ends
     read.length_label = cable.length_label
     read.total_value = cable.price * cable.quantity if cable.price is not None else None
@@ -129,7 +138,10 @@ async def list_cables(
         .all()
     )
     places, items = await _names(session, user)
-    return ok([_read(row, places, items) for row in rows])
+    ids = [row.id for row in rows]
+    thumbnails = await primary_thumbnails(session, "cable", ids)
+    counts = await count_photos(session, "cable", ids)
+    return ok([_read(row, places, items, thumbnails, counts) for row in rows])
 
 
 @router.get(
@@ -169,7 +181,9 @@ async def create_cable(
     await session.refresh(cable)
 
     places, items = await _names(session, user)
-    return ok(_read(cable, places, items))
+    thumbnails = await primary_thumbnails(session, "cable", [cable.id])
+    counts = await count_photos(session, "cable", [cable.id])
+    return ok(_read(cable, places, items, thumbnails, counts))
 
 
 @router.get(
@@ -182,7 +196,9 @@ async def get_cable(
 ) -> Envelope[CableRead]:
     cable = await _get_cable_or_404(session, cable_id, user)
     places, items = await _names(session, user)
-    return ok(_read(cable, places, items))
+    thumbnails = await primary_thumbnails(session, "cable", [cable.id])
+    counts = await count_photos(session, "cable", [cable.id])
+    return ok(_read(cable, places, items, thumbnails, counts))
 
 
 @router.put(
@@ -212,7 +228,9 @@ async def update_cable(
     await session.refresh(cable)
 
     places, items = await _names(session, user)
-    return ok(_read(cable, places, items))
+    thumbnails = await primary_thumbnails(session, "cable", [cable.id])
+    counts = await count_photos(session, "cable", [cable.id])
+    return ok(_read(cable, places, items, thumbnails, counts))
 
 
 @router.delete(

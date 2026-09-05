@@ -6,13 +6,16 @@
  * so it answers with no signal.
  */
 
+import { Image } from 'expo-image'
 import { useFocusEffect } from 'expo-router'
 import { useCallback, useState } from 'react'
-import { FlatList, RefreshControl, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, View } from 'react-native'
 
-import type { CableView } from '@/api/types'
+import { api, mediaUrl } from '@/api/client'
+import type { CableView, OwnerPhoto } from '@/api/types'
 import { Badge, Body, Caption, EmptyState, Input, Screen } from '@/components/ui'
-import { listCables } from '@/db'
+import PhotoViewer from '@/components/PhotoViewer'
+import { listCables, listOwnerPhotos } from '@/db'
 import { useSyncStore } from '@/store/sync'
 import { spacing, useTheme } from '@/theme'
 
@@ -33,6 +36,19 @@ export default function CablesScreen() {
   )
 
   const total = rows.reduce((sum, row) => sum + row.quantity, 0)
+
+  const [shown, setShown] = useState<OwnerPhoto[]>([])
+  const [viewing, setViewing] = useState<number | null>(null)
+  const [title, setTitle] = useState('')
+
+  /** Open the pictures of one cable, from the local copy. */
+  const openPhotos = async (cable: CableView): Promise<void> => {
+    const photos = await listOwnerPhotos('cable', cable.id)
+    if (photos.length === 0) return
+    setShown(photos)
+    setTitle(cable.name)
+    setViewing(0)
+  }
 
   return (
     <Screen edges={['bottom']}>
@@ -82,7 +98,9 @@ export default function CablesScreen() {
           />
         }
         renderItem={({ item }) => (
-          <View
+          <Pressable
+            onPress={() => void openPhotos(item)}
+            disabled={item.photo_count === 0}
             style={{
               backgroundColor: theme.card,
               borderColor: theme.border,
@@ -90,8 +108,24 @@ export default function CablesScreen() {
               borderRadius: 12,
               padding: spacing.md,
               gap: 2,
+              flexDirection: 'row',
             }}
           >
+            {item.thumbnail_path ? (
+              <Image
+                source={{ uri: mediaUrl(item.thumbnail_path) }}
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 8,
+                  marginRight: spacing.md,
+                }}
+                contentFit="cover"
+                transition={120}
+              />
+            ) : null}
+
+            <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <Body weight="500" numberOfLines={1}>
                 {item.quantity > 1 ? `${item.quantity}x ` : ''}
@@ -111,8 +145,24 @@ export default function CablesScreen() {
               {item.item_name ? ` · for the ${item.item_name}` : ''}
             </Caption>
             {item.notes ? <Caption>{item.notes}</Caption> : null}
-          </View>
+            {item.photo_count > 1 ? (
+              <Caption>{item.photo_count} photographs. Tap to see them.</Caption>
+            ) : null}
+            </View>
+          </Pressable>
         )}
+      />
+
+      <PhotoViewer
+        photos={shown}
+        index={viewing}
+        title={title}
+        onClose={() => setViewing(null)}
+        onSetPrimary={async (photoId) => {
+          await api.put(`/api/photos/${photoId}/primary`, {})
+          await sync.run()
+          await load(search)
+        }}
       />
     </Screen>
   )

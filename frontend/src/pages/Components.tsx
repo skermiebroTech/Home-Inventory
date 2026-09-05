@@ -3,6 +3,7 @@
 import { Cog, Package, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
+import { mediaUrl } from '@/api/client'
 import type { Component, ComponentWrite } from '@/api/types'
 import {
   Badge,
@@ -18,6 +19,7 @@ import {
   Select,
   Textarea,
 } from '@/components/ui'
+import PhotoStrip from '@/components/PhotoStrip'
 import {
   useComponent,
   useComponents,
@@ -121,7 +123,15 @@ export default function Components() {
         {data?.map((component) => (
           <Card key={component.id} className="flex flex-col gap-2">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
+              {component.thumbnail_path ? (
+                <img
+                  src={mediaUrl(component.thumbnail_path)}
+                  alt=""
+                  loading="lazy"
+                  className="h-12 w-12 shrink-0 rounded-lg border border-ink-200 object-cover dark:border-ink-800"
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
                 <button
                   onClick={() => setInspecting(component.id)}
                   className="truncate text-left text-sm font-medium hover:underline"
@@ -262,6 +272,17 @@ export default function Components() {
               />
               This runs out and gets replaced, such as a filter or a blade.
             </label>
+
+            {draft.id ? (
+              <div>
+                <span className="label">Photographs</span>
+                <PhotoStrip owner="components" ownerId={draft.id} />
+              </div>
+            ) : (
+              <p className="text-xs text-ink-500">
+                Save the component first. Then you can add photographs.
+              </p>
+            )}
           </div>
         ) : null}
       </Modal>

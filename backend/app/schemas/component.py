@@ -69,6 +69,10 @@ class ComponentRead(ORMModel):
     version: int
     created_at: datetime
     updated_at: datetime
+    thumbnail_path: str | None = Field(
+        default=None, description="The picture that stands for this component."
+    )
+    photo_count: int = 0
 
 
 class ComponentDetail(ComponentRead):

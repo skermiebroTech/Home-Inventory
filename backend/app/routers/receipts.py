@@ -56,15 +56,18 @@ async def _parse_in_background(receipt_id: uuid.UUID, image: bytes) -> ParsedRec
         if receipt is None:
             return parsed
 
+        # The reader runs after the reply, so a person can correct the row
+        # while it works. It fills an empty field and never writes over an
+        # answer that somebody already gave.
         columns = parsed.to_receipt_columns()
-        receipt.vendor = columns["vendor"]
-        receipt.purchase_date = columns["purchase_date"]
-        receipt.total_amount = (
-            Decimal(str(columns["total_amount"]))
-            if columns["total_amount"] is not None
-            else None
-        )
-        receipt.currency = columns["currency"] or DEFAULT_CURRENCY
+        if receipt.vendor is None:
+            receipt.vendor = columns["vendor"]
+        if receipt.purchase_date is None:
+            receipt.purchase_date = columns["purchase_date"]
+        if receipt.total_amount is None and columns["total_amount"] is not None:
+            receipt.total_amount = Decimal(str(columns["total_amount"]))
+        if columns["currency"]:
+            receipt.currency = columns["currency"]
         receipt.ocr_raw_text = columns["ocr_raw_text"]
         receipt.ocr_parsed_json = parsed.to_dict()
         receipt.version += 1

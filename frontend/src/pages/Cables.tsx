@@ -9,7 +9,9 @@
 import { Cable as CableIcon, Plus, Search, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
+import { mediaUrl } from '@/api/client'
 import type { Cable, CableWrite } from '@/api/types'
+import PhotoStrip from '@/components/PhotoStrip'
 import { LocationSelect } from '@/components/pickers'
 import {
   Badge,
@@ -211,6 +213,14 @@ export default function Cables() {
                 key={cable.id}
                 className="flex flex-wrap items-center gap-3 border-b border-ink-200 px-4 py-3 last:border-0 dark:border-ink-800"
               >
+                {cable.thumbnail_path ? (
+                  <img
+                    src={mediaUrl(cable.thumbnail_path)}
+                    alt=""
+                    loading="lazy"
+                    className="h-11 w-11 shrink-0 rounded-lg border border-ink-200 object-cover dark:border-ink-800"
+                  />
+                ) : null}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
                     {cable.quantity > 1 ? `${cable.quantity}x ` : ''}
@@ -421,6 +431,17 @@ export default function Cables() {
                 }
               />
             </Field>
+
+            {draft.id ? (
+              <div>
+                <span className="label">Photographs</span>
+                <PhotoStrip owner="cables" ownerId={draft.id} />
+              </div>
+            ) : (
+              <p className="text-xs text-ink-500">
+                Save the cable first. Then you can add photographs.
+              </p>
+            )}
           </div>
         ) : null}
       </Modal>

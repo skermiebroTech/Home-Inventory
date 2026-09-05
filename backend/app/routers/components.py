@@ -15,6 +15,7 @@ from app.models.component import Component, ComponentSpare, ItemComponent
 from app.models.item import Item
 from app.models.location import Location
 from app.models.user import User
+from app.routers.photos import count_photos, primary_thumbnails
 from app.schemas.common import Envelope, Message, ok
 from app.schemas.component import (
     ComponentCreate,
@@ -30,6 +31,7 @@ from app.schemas.component import (
     SpareUse,
     SpareWrite,
 )
+from app.services.activity_service import record
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import ApiError, conflict, not_found
 from app.utils.queries import get_item_or_404, get_location_or_404
@@ -153,7 +155,17 @@ async def list_components(
         statement = statement.where(Component.is_consumable.is_(consumable))
 
     rows = (await session.execute(statement.order_by(Component.name))).scalars().all()
-    return ok([ComponentRead.model_validate(row) for row in rows])
+    ids = [row.id for row in rows]
+    thumbnails = await primary_thumbnails(session, "component", ids)
+    counts = await count_photos(session, "component", ids)
+
+    reply: list[ComponentRead] = []
+    for row in rows:
+        read = ComponentRead.model_validate(row)
+        read.thumbnail_path = thumbnails.get(row.id)
+        read.photo_count = counts.get(row.id, 0)
+        reply.append(read)
+    return ok(reply)
 
 
 @router.post(
@@ -203,6 +215,12 @@ async def get_component(
     )
 
     detail = ComponentDetail.model_validate(component)
+    detail.thumbnail_path = (
+        await primary_thumbnails(session, "component", [component.id])
+    ).get(component.id)
+    detail.photo_count = (await count_photos(session, "component", [component.id])).get(
+        component.id, 0
+    )
     detail.fitted_to = [
         ComponentUse(item_id=row[0], item_name=row[1], quantity=row[2]) for row in uses
     ]
@@ -333,6 +351,17 @@ async def add_item_component(
     session.add(fitted)
     # A new part changes what the item is, so the mobile copy must hear of it.
     item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="component_fitted",
+        summary=(
+            f"{fitted.quantity}x {component.name} was fitted."
+            if fitted.quantity > 1
+            else f"{component.name} was fitted."
+        ),
+    )
     await session.commit()
     await session.refresh(fitted)
     return ok(_fitted_read(fitted, component))
@@ -353,9 +382,16 @@ async def update_item_component(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(fitted, field, value)
     fitted.version += 1
+    component = await _get_component_or_404(session, fitted.component_id, user)
+    record(
+        session,
+        user=user,
+        entity_id=fitted.item_id,
+        action="component_changed",
+        summary=f"The fitted {component.name} changed.",
+    )
     await session.commit()
     await session.refresh(fitted)
-    component = await _get_component_or_404(session, fitted.component_id, user)
     return ok(_fitted_read(fitted, component))
 
 
@@ -370,6 +406,14 @@ async def remove_item_component(
     fitted = await _get_fitted_or_404(session, fitted_id, user)
     fitted.deleted_at = datetime.now(UTC)
     fitted.version += 1
+    component = await _get_component_or_404(session, fitted.component_id, user)
+    record(
+        session,
+        user=user,
+        entity_id=fitted.item_id,
+        action="component_removed",
+        summary=f"{component.name} came off.",
+    )
     await session.commit()
     return ok(Message(message="The component is off the item."))
 

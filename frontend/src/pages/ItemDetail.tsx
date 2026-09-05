@@ -3,6 +3,7 @@
 import {
   ArrowLeft,
   HandHelping,
+  History,
   MapPin,
   Pencil,
   QrCode,
@@ -32,13 +33,14 @@ import {
   Textarea,
 } from '@/components/ui'
 import { useDeleteItem, useItem, useUpdateItem } from '@/hooks/useItems'
+import { useItemActivity } from '@/hooks/usePhotos'
 import {
   useAddMaintenance,
   useItemMaintenance,
   useLendItem,
   useReturnItem,
 } from '@/hooks/useOperations'
-import { formatDate, formatMoney, today } from '@/lib/format'
+import { formatDate, formatDateTime, formatMoney, today } from '@/lib/format'
 import { toastError, toastOk } from '@/store/toast'
 
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
@@ -60,6 +62,7 @@ export default function ItemDetailPage() {
   const lend = useLendItem()
   const returnItem = useReturnItem()
   const logs = useItemMaintenance(id)
+  const activity = useItemActivity(id)
   const addLog = useAddMaintenance(id)
 
   const [editing, setEditing] = useState(false)
@@ -195,6 +198,38 @@ export default function ItemDetailPage() {
               </ul>
             )}
           </Card>
+
+          <Card>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+              <History className="h-4 w-4 text-ink-400" /> Activity
+            </h2>
+            {(activity.data?.length ?? 0) === 0 ? (
+              <p className="text-sm text-ink-500">Nothing has happened yet.</p>
+            ) : (
+              <ol className="space-y-2">
+                {activity.data?.map((line) => (
+                  <li key={line.id} className="flex gap-3 text-sm">
+                    <span
+                      aria-hidden
+                      className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-ink-300 dark:bg-ink-700"
+                    />
+                    <div className="min-w-0">
+                      <p>{line.summary}</p>
+                      {line.detail ? (
+                        <pre className="mt-0.5 whitespace-pre-wrap text-xs text-ink-500">
+                          {line.detail}
+                        </pre>
+                      ) : null}
+                      <p className="text-xs text-ink-500">
+                        {formatDateTime(line.created_at)}
+                        {line.actor ? ` · ${line.actor}` : ''}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
         </div>
 
         <Card>
@@ -202,6 +237,7 @@ export default function ItemDetailPage() {
           <dl className="space-y-3">
             <Detail label="Value" value={formatMoney(item.current_value ?? item.purchase_price)} />
             <Detail label="Quantity" value={item.quantity} />
+            <Detail label="Owner" value={item.owner} />
             <Detail label="Category" value={[item.category, item.subcategory].filter(Boolean).join(' / ')} />
             <Detail label="Brand and model" value={[item.brand, item.model].filter(Boolean).join(' ')} />
             <Detail label="Serial number" value={item.serial_number} />

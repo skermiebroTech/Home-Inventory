@@ -68,6 +68,7 @@ export interface Item {
   condition: string | null
   quantity: number
   notes: string | null
+  owner: string | null
   is_lent: boolean
   lent_to: string | null
   lent_date: string | null
@@ -238,6 +239,8 @@ export type SyncEntity =
   | 'item_component'
   | 'spare'
   | 'cable'
+  | 'photo'
+  | 'activity'
 
 export type SyncOp = 'create' | 'update' | 'delete'
 
@@ -255,6 +258,8 @@ export interface SyncChanges {
   item_components: ItemComponentRow[]
   spares: SpareRow[]
   cables: CableRow[]
+  photos: OwnerPhoto[]
+  activity: ActivityLine[]
   deleted: Partial<Record<SyncEntity, string[]>>
   has_more: boolean
 }
@@ -324,6 +329,37 @@ export interface SpareRow {
   updated_at: string
 }
 
+/** One photograph of a component or a cable. */
+export interface OwnerPhoto {
+  id: string
+  user_id: string
+  owner_type: 'component' | 'cable'
+  owner_id: string
+  file_path: string
+  thumbnail_path: string | null
+  is_primary: boolean
+  sort_order: number
+  caption: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** One line of the activity log of an item. */
+export interface ActivityLine {
+  id: string
+  user_id: string
+  entity_type: string
+  entity_id: string
+  action: string
+  summary: string
+  detail: string | null
+  actor: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
 /** One cable, as the table holds it. */
 export interface CableRow {
   id: string
@@ -352,6 +388,8 @@ export interface CableView extends CableRow {
   length_label: string | null
   location_name: string | null
   item_name: string | null
+  thumbnail_path: string | null
+  photo_count: number
 }
 
 /** A fitted component with the catalogue joined in, for the screens. */
@@ -362,6 +400,7 @@ export interface FittedComponent extends ItemComponentRow {
   is_consumable: boolean
   effective_price: string | null
   line_total: number
+  thumbnail_path: string | null
 }
 
 /** A row of stock with the catalogue joined in. */

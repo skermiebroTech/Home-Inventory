@@ -94,6 +94,7 @@ export interface Item {
   condition: Condition | null
   quantity: number
   notes: string | null
+  owner: string | null
   is_lent: boolean
   lent_to: string | null
   lent_date: string | null
@@ -127,11 +128,13 @@ export interface ItemWrite {
   condition?: Condition | null
   quantity?: number
   notes?: string | null
+  owner?: string | null
   tag_ids?: string[]
 }
 
 export interface ItemQuery {
   q?: string
+  owner?: string
   location_id?: string
   include_sublocations?: boolean
   category?: string
@@ -416,6 +419,8 @@ export interface Component {
   version: number
   created_at: string
   updated_at: string
+  thumbnail_path: string | null
+  photo_count: number
 }
 
 export interface ComponentUse {
@@ -494,6 +499,35 @@ export interface Spare {
   is_low: boolean
 }
 
+export interface OwnerPhoto {
+  id: string
+  user_id: string
+  owner_type: 'component' | 'cable'
+  owner_id: string
+  file_path: string
+  thumbnail_path: string | null
+  is_primary: boolean
+  sort_order: number
+  caption: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ActivityLine {
+  id: string
+  user_id: string
+  entity_type: string
+  entity_id: string
+  action: string
+  summary: string
+  detail: string | null
+  actor: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Cable {
   id: string
   user_id: string
@@ -518,6 +552,8 @@ export interface Cable {
   total_value: string | null
   location_name: string | null
   item_name: string | null
+  thumbnail_path: string | null
+  photo_count: number
 }
 
 export interface CableWrite {

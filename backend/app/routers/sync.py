@@ -7,14 +7,17 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from app.models.activity import Activity
 from app.models.cable import Cable
 from app.models.component import Component, ComponentSpare, ItemComponent
 from app.models.custom_field import CustomField
 from app.models.item import Item, ItemPhoto
 from app.models.location import Location
 from app.models.maintenance import MaintenanceLog
+from app.models.photo import Photo
 from app.models.receipt import Receipt
 from app.models.tag import Tag
+from app.schemas.activity import ActivityRow
 from app.schemas.cable import CableRow
 from app.schemas.common import Envelope, ok
 from app.schemas.component import ComponentRead, ItemComponentRow, SpareRow
@@ -22,6 +25,7 @@ from app.schemas.custom_field import CustomFieldRead
 from app.schemas.item import ItemPhotoRead, ItemRead
 from app.schemas.location import LocationRead
 from app.schemas.maintenance import MaintenanceRead
+from app.schemas.photo import PhotoRow
 from app.schemas.receipt import ReceiptRead
 from app.schemas.sync import (
     SyncChange,
@@ -83,6 +87,8 @@ REGISTRY = SyncRegistry(
         ),
         SyncResource(name=SyncEntity.SPARE.value, model=ComponentSpare),
         SyncResource(name=SyncEntity.CABLE.value, model=Cable),
+        SyncResource(name=SyncEntity.PHOTO.value, model=Photo),
+        SyncResource(name=SyncEntity.ACTIVITY.value, model=Activity),
     ]
 )
 
@@ -103,6 +109,8 @@ READERS: dict[str, Any] = {
     SyncEntity.ITEM_COMPONENT.value: ItemComponentRow,
     SyncEntity.SPARE.value: SpareRow,
     SyncEntity.CABLE.value: CableRow,
+    SyncEntity.PHOTO.value: PhotoRow,
+    SyncEntity.ACTIVITY.value: ActivityRow,
 }
 
 #: Which field of `SyncChanges` holds which table.
@@ -118,6 +126,8 @@ FIELDS: dict[str, str] = {
     SyncEntity.ITEM_COMPONENT.value: "item_components",
     SyncEntity.SPARE.value: "spares",
     SyncEntity.CABLE.value: "cables",
+    SyncEntity.PHOTO.value: "photos",
+    SyncEntity.ACTIVITY.value: "activity",
 }
 
 

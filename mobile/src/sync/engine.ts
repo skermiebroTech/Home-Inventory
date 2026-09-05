@@ -23,12 +23,14 @@ import {
   readOutbox,
   readPhotoQueue,
   setMeta,
+  upsertActivity,
   upsertCables,
   upsertComponents,
   upsertItemComponents,
   upsertItems,
   upsertLocations,
   upsertMaintenance,
+  upsertOwnerPhotos,
   upsertPhotos,
   upsertReceipts,
   upsertSpares,
@@ -86,6 +88,8 @@ export async function pull(): Promise<{ count: number; serverTime: string }> {
   await upsertItemComponents(changes.item_components ?? [])
   await upsertSpares(changes.spares ?? [])
   await upsertCables(changes.cables ?? [])
+  await upsertOwnerPhotos(changes.photos ?? [])
+  await upsertActivity(changes.activity ?? [])
 
   // A hard delete never reaches a delta query, so the server sends the ids
   // of the rows that it marked deleted.
@@ -99,6 +103,8 @@ export async function pull(): Promise<{ count: number; serverTime: string }> {
   await deleteRows('item_components', deleted.item_component ?? [])
   await deleteRows('spares', deleted.spare ?? [])
   await deleteRows('cables', deleted.cable ?? [])
+  await deleteRows('photos', deleted.photo ?? [])
+  await deleteRows('activity', deleted.activity ?? [])
 
   const count =
     (changes.items?.length ?? 0) +
@@ -110,7 +116,9 @@ export async function pull(): Promise<{ count: number; serverTime: string }> {
     (changes.components?.length ?? 0) +
     (changes.item_components?.length ?? 0) +
     (changes.spares?.length ?? 0) +
-    (changes.cables?.length ?? 0)
+    (changes.cables?.length ?? 0) +
+    (changes.photos?.length ?? 0) +
+    (changes.activity?.length ?? 0)
 
   await setMeta(LAST_SYNC, changes.server_time)
   return { count, serverTime: changes.server_time }

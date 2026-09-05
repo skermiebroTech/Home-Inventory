@@ -97,6 +97,11 @@ class Item(UUIDMixin, TimestampMixin, SyncMixin, Base):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    #: The person in the house who owns this item. A name, not an account:
+    #: the children and the housemates do not sign in, but they still own
+    #: their own things.
+    owner: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
+
     is_lent: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false", index=True
     )

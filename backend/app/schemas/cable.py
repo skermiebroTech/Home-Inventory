@@ -96,3 +96,7 @@ class CableRead(CableRow):
     )
     location_name: str | None = None
     item_name: str | None = None
+    thumbnail_path: str | None = Field(
+        default=None, description="The picture that stands for this cable."
+    )
+    photo_count: int = 0

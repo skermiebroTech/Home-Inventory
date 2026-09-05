@@ -9,6 +9,7 @@
 import * as SQLite from 'expo-sqlite'
 
 import type {
+  ActivityLine,
   CableRow,
   CableView,
   Component,
@@ -18,6 +19,7 @@ import type {
   ItemPhoto,
   Location,
   MaintenanceLog,
+  OwnerPhoto,
   Receipt,
   SpareRow,
   SpareWithComponent,
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS items (
   condition TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
   notes TEXT,
+  owner TEXT,
   is_lent INTEGER NOT NULL DEFAULT 0,
   lent_to TEXT,
   lent_date TEXT,
@@ -188,6 +191,35 @@ CREATE TABLE IF NOT EXISTS cables (
 );
 CREATE INDEX IF NOT EXISTS ix_cables_kind ON cables(kind);
 
+CREATE TABLE IF NOT EXISTS photos (
+  id TEXT PRIMARY KEY,
+  owner_type TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  thumbnail_path TEXT,
+  is_primary INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  caption TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT,
+  pending INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_photos_owner ON photos(owner_type, owner_id);
+
+CREATE TABLE IF NOT EXISTS activity (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  detail TEXT,
+  actor TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT,
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_activity_entity ON activity(entity_type, entity_id);
+
 -- Every change made while offline waits here.
 CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -225,7 +257,7 @@ CREATE TABLE IF NOT EXISTS meta (
  * the rows that the server already holds. A change of this number clears the
  * watermark, so the next pull brings everything down one time.
  */
-const SYNC_SCHEMA = '3'
+const SYNC_SCHEMA = '4'
 
 export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (database) return database
@@ -262,6 +294,7 @@ async function fullPullAfterSchemaChange(db: SQLite.SQLiteDatabase): Promise<voi
 async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
   const wanted: Array<[string, string, string]> = [
     ['item_photos', 'ocr_text', 'TEXT'],
+    ['items', 'owner', 'TEXT'],
   ]
   for (const [table, column, type] of wanted) {
     const columns = await db.getAllAsync<{ name: string }>(
@@ -279,7 +312,7 @@ export async function resetDatabase(): Promise<void> {
     DELETE FROM tags; DELETE FROM item_tags; DELETE FROM receipts;
     DELETE FROM maintenance_logs; DELETE FROM outbox; DELETE FROM photo_queue;
     DELETE FROM components; DELETE FROM item_components; DELETE FROM spares;
-    DELETE FROM cables;
+    DELETE FROM cables; DELETE FROM photos; DELETE FROM activity;
     DELETE FROM meta;
   `)
 }
@@ -311,12 +344,14 @@ const ITEM_COLUMNS = [
   'id', 'location_id', 'name', 'description', 'category', 'subcategory', 'brand',
   'model', 'serial_number', 'barcode', 'purchase_price', 'current_value',
   'purchase_date', 'purchase_location', 'warranty_expires', 'condition',
-  'quantity', 'notes', 'is_lent', 'lent_to', 'lent_date', 'version',
+  'quantity', 'notes', 'owner', 'is_lent', 'lent_to', 'lent_date', 'version',
   'created_at', 'updated_at',
 ] as const
 
 export interface LocalItem extends Item {
   pending: number
+  /** The picture that the list shows, when the item has one. */
+  thumbnail_path?: string | null
 }
 
 export async function upsertItems(items: Item[], pending = 0): Promise<void> {
@@ -334,7 +369,7 @@ export async function upsertItems(items: Item[], pending = 0): Promise<void> {
         item.subcategory, item.brand, item.model, item.serial_number, item.barcode,
         item.purchase_price, item.current_value, item.purchase_date,
         item.purchase_location, item.warranty_expires, item.condition,
-        item.quantity, item.notes, item.is_lent ? 1 : 0, item.lent_to,
+        item.quantity, item.notes, item.owner, item.is_lent ? 1 : 0, item.lent_to,
         item.lent_date, item.version, item.created_at, item.updated_at, pending,
       ])
       if (item.tags) {
@@ -383,7 +418,12 @@ export async function listItems(options: {
   const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''
   args.push(options.limit ?? 100, options.offset ?? 0)
   const rows = await db.getAllAsync<Record<string, unknown>>(
-    `SELECT * FROM items ${clause} ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`,
+    `SELECT items.*,
+            (SELECT p.thumbnail_path FROM item_photos p
+              WHERE p.item_id = items.id
+              ORDER BY p.is_primary DESC, p.created_at LIMIT 1) AS thumb
+       FROM items ${clause}
+      ORDER BY name COLLATE NOCASE LIMIT ? OFFSET ?`,
     ...args,
   )
   return rows.map(toItem)
@@ -400,15 +440,21 @@ export async function getItem(id: string): Promise<LocalItem | null> {
 
 export async function getItemPhotos(itemId: string): Promise<ItemPhoto[]> {
   const db = await openDatabase()
-  return db.getAllAsync<ItemPhoto>(
+  const rows = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM item_photos WHERE item_id = ? ORDER BY is_primary DESC, created_at',
     itemId,
   )
+  // SQLite holds a flag as 0 or 1. A React prop wants a real boolean.
+  return rows.map((row) => ({
+    ...(row as unknown as ItemPhoto),
+    is_primary: Boolean(row.is_primary),
+  }))
 }
 
 function toItem(row: Record<string, unknown>): LocalItem {
   return {
     ...(row as unknown as Item),
+    thumbnail_path: (row.thumb as string | null) ?? null,
     is_lent: Boolean(row.is_lent),
     quantity: Number(row.quantity ?? 1),
     version: Number(row.version ?? 1),
@@ -564,7 +610,10 @@ export async function listItemComponents(itemId: string): Promise<FittedComponen
   const rows = await db.getAllAsync<Record<string, unknown>>(
     `SELECT ic.*, c.name AS c_name, c.brand AS c_brand,
             c.model_number AS c_model, c.is_consumable AS c_consumable,
-            c.default_price AS c_default
+            c.default_price AS c_default,
+            (SELECT p.thumbnail_path FROM photos p
+              WHERE p.owner_type = 'component' AND p.owner_id = c.id
+              ORDER BY p.is_primary DESC, p.sort_order LIMIT 1) AS thumb
        FROM item_components ic
        JOIN components c ON c.id = ic.component_id
       WHERE ic.item_id = ?
@@ -586,6 +635,7 @@ export async function listItemComponents(itemId: string): Promise<FittedComponen
       is_consumable: Boolean(row.c_consumable),
       effective_price: price,
       line_total: price ? Number.parseFloat(price) * quantity : 0,
+      thumbnail_path: (row.thumb as string | null) ?? null,
     }
   })
 }
@@ -661,7 +711,12 @@ export async function listCables(search = ''): Promise<CableView[]> {
   const db = await openDatabase()
   const like = `%${search.trim()}%`
   const rows = await db.getAllAsync<Record<string, unknown>>(
-    `SELECT c.*, l.name AS place, i.name AS device
+    `SELECT c.*, l.name AS place, i.name AS device,
+            (SELECT p.thumbnail_path FROM photos p
+              WHERE p.owner_type = 'cable' AND p.owner_id = c.id
+              ORDER BY p.is_primary DESC, p.sort_order LIMIT 1) AS thumb,
+            (SELECT COUNT(*) FROM photos p
+              WHERE p.owner_type = 'cable' AND p.owner_id = c.id) AS shots
        FROM cables c
        LEFT JOIN locations l ON l.id = c.location_id
        LEFT JOIN items i ON i.id = c.item_id
@@ -680,6 +735,8 @@ export async function listCables(search = ''): Promise<CableView[]> {
       ...(row as unknown as CableRow),
       ends: first && second ? `${first} to ${second}` : first ?? second,
       length_label: lengthLabel((row.length_cm as number | null) ?? null),
+      thumbnail_path: (row.thumb as string | null) ?? null,
+      photo_count: Number(row.shots ?? 0),
       location_name: (row.place as string | null) ?? null,
       item_name: (row.device as string | null) ?? null,
     }
@@ -690,6 +747,64 @@ export async function getSpare(id: string): Promise<SpareRow | null> {
   const db = await openDatabase()
   const row = await db.getFirstAsync<SpareRow>('SELECT * FROM spares WHERE id = ?', id)
   return row ?? null
+}
+
+export async function upsertOwnerPhotos(rows: OwnerPhoto[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO photos
+       (id, owner_type, owner_id, file_path, thumbnail_path, is_primary,
+        sort_order, caption, version, updated_at, pending)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      row.id, row.owner_type, row.owner_id, row.file_path, row.thumbnail_path,
+      row.is_primary ? 1 : 0, row.sort_order, row.caption, row.version,
+      row.updated_at,
+    )
+  }
+}
+
+/** The photographs of one component or one cable. The thumbnail is first. */
+export async function listOwnerPhotos(
+  ownerType: 'component' | 'cable',
+  ownerId: string,
+): Promise<OwnerPhoto[]> {
+  const db = await openDatabase()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM photos WHERE owner_type = ? AND owner_id = ?
+      ORDER BY is_primary DESC, sort_order, id`,
+    ownerType,
+    ownerId,
+  )
+  return rows.map((row) => ({
+    ...(row as unknown as OwnerPhoto),
+    is_primary: Boolean(row.is_primary),
+  }))
+}
+
+export async function upsertActivity(rows: ActivityLine[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO activity
+       (id, entity_type, entity_id, action, summary, detail, actor, version,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      row.id, row.entity_type, row.entity_id, row.action, row.summary,
+      row.detail, row.actor, row.version, row.created_at, row.updated_at,
+    )
+  }
+}
+
+/** The log of one item. The newest line comes first. */
+export async function listActivity(itemId: string, limit = 50): Promise<ActivityLine[]> {
+  const db = await openDatabase()
+  return db.getAllAsync<ActivityLine>(
+    `SELECT * FROM activity WHERE entity_type = 'item' AND entity_id = ?
+      ORDER BY created_at DESC LIMIT ?`,
+    itemId,
+    limit,
+  )
 }
 
 // --- The outbox ---

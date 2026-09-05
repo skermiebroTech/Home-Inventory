@@ -19,7 +19,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.utils.settings import setting
 
-UploadKind = Literal["items", "receipts", "locations"]
+UploadKind = Literal["items", "receipts", "locations", "components", "cables"]
 
 #: The EXIF tag that holds the GPS pointer.
 GPS_IFD_TAG: Final[int] = 0x8825

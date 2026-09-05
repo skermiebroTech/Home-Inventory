@@ -10,6 +10,7 @@ a router that owns a matching parametrised path. The lending router holds
 from fastapi import APIRouter
 
 from app.routers import (
+    activity,
     ai,
     auth,
     backup,
@@ -23,6 +24,7 @@ from app.routers import (
     locations,
     maintenance,
     nfc,
+    photos,
     receipts,
     sync,
     tags,
@@ -31,6 +33,7 @@ from app.routers import (
 ALL_ROUTERS: list[APIRouter] = [
     health.router,
     auth.router,
+    activity.router,  # Owns /api/items/{item_id}/activity.
     lending.router,  # Must precede items: it owns /api/items/lent.
     maintenance.router,  # Owns /api/items/{item_id}/maintenance.
     labels.router,  # Owns /api/items/{item_id}/qr.
@@ -39,6 +42,7 @@ ALL_ROUTERS: list[APIRouter] = [
     locations.router,
     tags.router,
     cables.router,
+    photos.router,  # Owns /api/components/{id}/photos and /api/cables/{id}/photos.
     receipts.router,
     ai.router,
     nfc.router,

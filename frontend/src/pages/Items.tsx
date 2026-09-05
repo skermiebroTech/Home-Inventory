@@ -18,6 +18,7 @@ import {
   Select,
 } from '@/components/ui'
 import { useTags } from '@/hooks/useCatalogue'
+import { useOwners } from '@/hooks/usePhotos'
 import { useItems } from '@/hooks/useItems'
 import { cx } from '@/lib/format'
 
@@ -32,6 +33,7 @@ const SORTS: Array<{ value: string; label: string }> = [
 export default function Items() {
   const [params, setParams] = useSearchParams()
   const { data: tags } = useTags()
+  const { data: owners } = useOwners()
   const [view, setView] = useState<'grid' | 'list'>(() =>
     (localStorage.getItem('homestock-view') as 'grid' | 'list') ?? 'grid',
   )
@@ -46,6 +48,7 @@ export default function Items() {
       location_id: params.get('location_id') ?? undefined,
       category: params.get('category') ?? undefined,
       condition: (params.get('condition') as Condition | null) ?? undefined,
+      owner: params.get('owner') ?? undefined,
       is_lent: params.get('is_lent') ? params.get('is_lent') === 'true' : undefined,
       tag_id: tagId.length > 0 ? tagId : undefined,
       sort: params.get('sort') ?? '-created_at',
@@ -64,7 +67,14 @@ export default function Items() {
     setParams(next)
   }
 
-  const activeFilters = ['location_id', 'category', 'condition', 'is_lent', 'tag_id'].filter(
+  const activeFilters = [
+    'location_id',
+    'category',
+    'condition',
+    'owner',
+    'is_lent',
+    'tag_id',
+  ].filter(
     (key) => params.has(key),
   ).length
 
@@ -144,6 +154,19 @@ export default function Items() {
               {['new', 'good', 'fair', 'poor'].map((entry) => (
                 <option key={entry} value={entry}>
                   {entry}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Owner">
+            <Select
+              value={params.get('owner') ?? ''}
+              onChange={(event) => update('owner', event.target.value || null)}
+            >
+              <option value="">Anyone</option>
+              {(owners ?? []).map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
             </Select>

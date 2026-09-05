@@ -17,6 +17,7 @@ from sqlalchemy.orm import selectinload
 from app.models.item import Item
 from app.schemas.common import Envelope, ok
 from app.schemas.item import ItemDetail, ItemRead, LendRequest
+from app.services.activity_service import record
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import conflict
 from app.utils.queries import (
@@ -77,6 +78,13 @@ async def lend_item(
         line = f"Lent to {item.lent_to} on {item.lent_date}: {body.notes.strip()}"
         item.notes = f"{item.notes}\n{line}" if item.notes else line
     item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="lent",
+        summary=f"Lent to {item.lent_to} on {item.lent_date}.",
+    )
 
     await session.commit()
     await reload_item(session, item)
@@ -95,10 +103,18 @@ async def return_item(
     if not item.is_lent:
         raise conflict("This item is not out on loan.")
 
+    borrower = item.lent_to
     item.is_lent = False
     item.lent_to = None
     item.lent_date = None
     item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="returned",
+        summary=f"{borrower} gave it back." if borrower else "It came back.",
+    )
 
     await session.commit()
     await reload_item(session, item)

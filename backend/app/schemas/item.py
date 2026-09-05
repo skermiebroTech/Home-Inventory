@@ -54,6 +54,11 @@ class ItemBase(BaseModel):
     condition: str | None = Field(default=None, pattern=CONDITION_PATTERN)
     quantity: int = Field(default=1, ge=0)
     notes: str | None = None
+    owner: str | None = Field(
+        default=None,
+        max_length=150,
+        description="The person in the house who owns this item.",
+    )
 
 
 class ItemCreate(ItemBase):
@@ -86,6 +91,7 @@ class ItemUpdate(BaseModel):
     condition: str | None = Field(default=None, pattern=CONDITION_PATTERN)
     quantity: int | None = Field(default=None, ge=0)
     notes: str | None = None
+    owner: str | None = Field(default=None, max_length=150)
     tag_ids: list[uuid.UUID] | None = None
 
 
@@ -111,6 +117,7 @@ class ItemRead(ORMModel):
     condition: str | None
     quantity: int
     notes: str | None
+    owner: str | None = None
     is_lent: bool
     lent_to: str | None
     lent_date: date | None
@@ -148,6 +155,7 @@ class ItemFilter(BaseModel):
     tag_ids: list[uuid.UUID] | None = None
     is_lent: bool | None = None
     condition: str | None = Field(default=None, pattern=CONDITION_PATTERN)
+    owner: str | None = Field(default=None, max_length=150)
     min_value: Decimal | None = Field(default=None, ge=0)
     max_value: Decimal | None = Field(default=None, ge=0)
     warranty_expiring_days: int | None = Field(

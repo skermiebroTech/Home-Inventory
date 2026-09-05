@@ -70,17 +70,24 @@ export function Body({
   muted,
   numberOfLines,
   weight,
+  tone,
 }: {
   children: ReactNode
   muted?: boolean
   numberOfLines?: number
   weight?: '400' | '500' | '600'
+  /** A colour of your own. The photograph viewer writes on black. */
+  tone?: string
 }) {
   const theme = useTheme()
   return (
     <Text
       numberOfLines={numberOfLines}
-      style={{ color: muted ? theme.muted : theme.text, fontSize: 14, fontWeight: weight ?? '400' }}
+      style={{
+        color: tone ?? (muted ? theme.muted : theme.text),
+        fontSize: 14,
+        fontWeight: weight ?? '400',
+      }}
     >
       {children}
     </Text>

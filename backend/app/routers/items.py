@@ -31,6 +31,7 @@ from app.schemas.item import (
     ItemRead,
     ItemUpdate,
 )
+from app.services.activity_service import change_summary, record
 from app.services.barcode_service import InvalidBarcodeError, get_barcode_service
 from app.services.job_service import get_job_store
 from app.services.ocr_service import OCRService
@@ -166,6 +167,7 @@ async def list_items(
     tag_id: Annotated[list[uuid.UUID] | None, Query()] = None,
     is_lent: bool | None = None,
     condition: Annotated[str | None, Query(pattern="^(new|good|fair|poor)$")] = None,
+    owner: Annotated[str | None, Query(description="The person who owns it.")] = None,
     warranty_expiring_days: Annotated[int | None, Query(ge=0)] = None,
     sort: Annotated[
         str, Query(description="Prefix with - to reverse.")
@@ -193,6 +195,8 @@ async def list_items(
         statement = statement.where(Item.is_lent.is_(is_lent))
     if condition:
         statement = statement.where(Item.condition == condition)
+    if owner:
+        statement = statement.where(Item.owner == owner)
     if warranty_expiring_days is not None:
         today = date.today()
         statement = statement.where(
@@ -214,6 +218,27 @@ async def list_items(
     )
 
 
+@router.get(
+    "/owners",
+    response_model=Envelope[list[str]],
+    summary="List the people who own something.",
+    description="The names that the items already carry. The field is free text.",
+)
+async def list_owners(user: CurrentUser, session: SessionDep) -> Envelope[list[str]]:
+    rows = await session.execute(
+        select(Item.owner)
+        .where(
+            Item.user_id == user.id,
+            Item.deleted_at.is_(None),
+            Item.owner.is_not(None),
+            Item.owner != "",
+        )
+        .group_by(Item.owner)
+        .order_by(sa_func.lower(Item.owner))
+    )
+    return ok([row[0] for row in rows])
+
+
 @router.post(
     "",
     response_model=Envelope[ItemDetail],
@@ -224,6 +249,14 @@ async def create_item(
     body: ItemCreate, user: CurrentUser, session: SessionDep
 ) -> Envelope[ItemDetail]:
     item = await _new_item(session, body, user)
+    await session.flush()
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="created",
+        summary=f"{item.name} was added.",
+    )
     await session.commit()
     await reload_item(session, item)
     return ok(await to_item_detail(session, item))
@@ -384,9 +417,24 @@ async def update_item(
     if "tag_ids" in changes:
         item.tags = await _resolve_tags(session, changes.pop("tag_ids") or [])
 
+    # The old values are read before the write, so that the log can name both.
+    before = {field: getattr(item, field, None) for field in changes}
+    moved = "location_id" in changes and changes["location_id"] != item.location_id
+
     for field, value in changes.items():
         setattr(item, field, value.strip() if field == "name" and value else value)
     item.version += 1
+
+    if changes:
+        summary, detail = change_summary(changes, before)
+        record(
+            session,
+            user=user,
+            entity_id=item.id,
+            action="moved" if moved and len(changes) == 1 else "changed",
+            summary=summary,
+            detail=detail or None,
+        )
 
     await session.commit()
     await reload_item(session, item)
@@ -408,6 +456,13 @@ async def delete_item(
     item = await get_item_or_404(session, item_id, user)
     item.deleted_at = datetime.now(UTC)
     item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="deleted",
+        summary=f"{item.name} was deleted.",
+    )
     await session.commit()
     return ok(Message(message="The item is deleted."))
 
@@ -460,6 +515,18 @@ async def upload_item_photos(
 
     # A new photograph changes what the mobile application shows for the item.
     item.version += 1
+    if created:
+        record(
+            session,
+            user=user,
+            entity_id=item.id,
+            action="photographed",
+            summary=(
+                "One photograph was added."
+                if len(created) == 1
+                else f"{len(created)} photographs were added."
+            ),
+        )
     await session.commit()
     for photo in created:
         await session.refresh(photo)
@@ -502,6 +569,35 @@ async def _read_photo_text(photos: list[tuple[uuid.UUID, bytes]]) -> int:
     return found
 
 
+@router.put(
+    "/{item_id}/photos/{photo_id}/primary",
+    response_model=Envelope[list[ItemPhotoRead]],
+    summary="Make this photograph the thumbnail of the item.",
+    description="The other photographs of the item lose the flag.",
+)
+async def set_primary_item_photo(
+    item_id: uuid.UUID, photo_id: uuid.UUID, user: CurrentUser, session: SessionDep
+) -> Envelope[list[ItemPhotoRead]]:
+    item = await get_item_or_404(session, item_id, user, with_relations=True)
+    if not any(photo.id == photo_id for photo in item.photos):
+        raise not_found("The photograph")
+
+    for photo in item.photos:
+        photo.is_primary = photo.id == photo_id
+    item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="thumbnail_set",
+        summary="The thumbnail changed.",
+    )
+    await session.commit()
+
+    item = await get_item_or_404(session, item_id, user, with_relations=True)
+    return ok([ItemPhotoRead.model_validate(photo) for photo in item.photos])
+
+
 @router.delete(
     "/{item_id}/photos/{photo_id}",
     response_model=Envelope[Message],
@@ -526,6 +622,13 @@ async def delete_item_photo(
         if remaining:
             remaining[0].is_primary = True
     item.version += 1
+    record(
+        session,
+        user=user,
+        entity_id=item.id,
+        action="photo_removed",
+        summary="One photograph was deleted.",
+    )
 
     await session.commit()
     return ok(Message(message="The photograph is deleted."))
