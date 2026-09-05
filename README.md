@@ -200,4 +200,5 @@ python scripts/dump_openapi.py
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+This repository has no licence file yet. Choose one before you publish it,
+because without a licence nobody else may use the code.
