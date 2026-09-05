@@ -15,6 +15,7 @@ import { Loading } from '@/components/ui'
 import { useHealth } from '@/hooks/useSystem'
 import { useAuthStore } from '@/store/auth'
 import AddItem from '@/pages/AddItem'
+import AssetTag from '@/pages/AssetTag'
 import Cables from '@/pages/Cables'
 import Components from '@/pages/Components'
 import Dashboard from '@/pages/Dashboard'
@@ -83,6 +84,8 @@ export default function App() {
         <Route path="/components" element={<Components />} />
         <Route path="/spares" element={<Spares />} />
         <Route path="/cables" element={<Cables />} />
+        {/* The address that a QR label holds. */}
+        <Route path="/a/:tag" element={<AssetTag />} />
         <Route path="/maintenance" element={<Maintenance />} />
         <Route path="/lending" element={<Lending />} />
         <Route path="/labels" element={<Labels />} />

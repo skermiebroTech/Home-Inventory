@@ -29,10 +29,21 @@ def qr_payload(
     The text is a deep link, so a normal phone camera opens the record in the
     web interface. The mobile application reads the same link and routes to its
     own screen.
+
+    An item names its asset tag here, not its UUID. "/a/0000042" is seven
+    characters where a UUID is thirty-six, and a QR code holds the difference
+    as a much coarser grid, which a camera reads from further away and a
+    small sticker still carries.
     """
     root = (base_url or str(setting("public_url", "") or "")).rstrip("/")
     path = f"/{kind}s/{entity_id}"
     return f"{root}{path}" if root else f"homestock:{kind}:{entity_id}"
+
+
+def item_qr_payload(asset_tag: str, base_url: str | None = None) -> str:
+    """Return the text that the label of one item encodes."""
+    root = (base_url or str(setting("public_url", "") or "")).rstrip("/")
+    return f"{root}/a/{asset_tag}" if root else asset_tag
 
 
 def generate_qr_png(
@@ -99,10 +110,16 @@ async def render_label_png(
     base_url: str | None = None,
     box_size: int = DEFAULT_BOX_SIZE,
     width: int | None = None,
+    asset_tag: str | None = None,
 ) -> bytes:
     """Render the printable label of one item or one location."""
+    payload = (
+        item_qr_payload(asset_tag, base_url)
+        if asset_tag
+        else qr_payload(kind, entity_id, base_url)
+    )
     return await render_qr_png(
-        qr_payload(kind, entity_id, base_url),
+        payload,
         box_size=box_size,
         caption=caption,
         width=width,
@@ -160,6 +177,7 @@ def _caption_font() -> ImageFont.ImageFont:
 __all__ = [
     "LabelKind",
     "generate_qr_png",
+    "item_qr_payload",
     "qr_payload",
     "render_label_png",
     "render_qr_png",

@@ -118,6 +118,9 @@ class ItemRead(ORMModel):
     quantity: int
     notes: str | None
     owner: str | None = None
+    asset_tag: str = Field(
+        default="", description='The number on the sticker, such as "0000042".'
+    )
     is_lent: bool
     lent_to: str | None
     lent_date: date | None

@@ -252,6 +252,7 @@ export default function ItemScreen() {
           <Detail label="Value" value={formatMoney(item.current_value ?? item.purchase_price)} />
           <Detail label="Quantity" value={String(item.quantity)} />
           <Detail label="Owner" value={item.owner} />
+          <Detail label="Asset tag" value={item.asset_tag} />
           <Detail label="Category" value={item.category} />
           <Detail label="Brand and model" value={[item.brand, item.model].filter(Boolean).join(' ')} />
           <Detail label="Serial number" value={item.serial_number} />

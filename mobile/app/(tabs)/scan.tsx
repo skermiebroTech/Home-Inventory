@@ -19,6 +19,7 @@ import { Alert, Image, Pressable, ScrollView, View } from 'react-native'
 import { api } from '@/api/client'
 import type { AiJob, BarcodeProduct, ReceiptDetail } from '@/api/types'
 import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
+import { getItemByTag } from '@/db'
 import { isOnline } from '@/sync/engine'
 import { radius, spacing, useTheme } from '@/theme'
 
@@ -199,8 +200,40 @@ export default function Scan() {
     }
   }
 
+  /**
+   * Return the asset tag that a HomeStock label holds.
+   *
+   * A label reads "http://tower:7850/a/0000042", and a person may also point
+   * the camera at a sticker that carries the bare number.
+   */
+  const assetTagOf = (code: string): string | null => {
+    const link = code.match(/\/a\/(\d{1,7})\b/)
+    if (link?.[1]) return link[1].padStart(7, '0')
+    const bare = code.trim()
+    return /^\d{7}$/.test(bare) ? bare : null
+  }
+
   const readBarcode = async (code: string): Promise<void> => {
     if (locked) return
+
+    // Our own label comes first. It opens the item, offline as well, because
+    // the phone already holds the row.
+    const tag = assetTagOf(code)
+    if (tag) {
+      const item = await getItemByTag(tag)
+      setLocked(true)
+      setTimeout(() => setLocked(false), 2000)
+      if (item) {
+        router.push(`/items/${item.id}`)
+      } else {
+        Alert.alert(
+          'No item here',
+          `Nothing on this phone carries the tag ${tag}. Sync and try again.`,
+        )
+      }
+      return
+    }
+
     setLocked(true)
     setBusy('Looking the code up')
     try {

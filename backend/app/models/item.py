@@ -15,8 +15,10 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    Sequence,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -24,6 +26,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, SyncMixin, TimestampMixin, UUIDMixin
 from app.models.tag import item_tags
+
+#: The numbers on the stickers come from here. The sequence belongs to the
+#: metadata, so a database that `create_all` builds carries it too, and not
+#: only one that Alembic migrated.
+ASSET_TAG_SEQUENCE = Sequence("items_asset_tag_seq", metadata=Base.metadata)
 
 if TYPE_CHECKING:
     from app.models.component import ItemComponent
@@ -80,6 +87,23 @@ class Item(UUIDMixin, TimestampMixin, SyncMixin, Base):
     model: Mapped[str | None] = mapped_column(String(150), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(150), nullable=True)
     barcode: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    #: The number on the sticker: seven digits, such as "0000042". A person
+    #: can read it out over the telephone, and the QR code holds a short
+    #: address that ends with it instead of a UUID. The database hands the
+    #: number out, so every way of making an item gets one: the web form, the
+    #: bulk add, the barcode, and a push from a phone that was offline.
+    asset_tag: Mapped[str] = mapped_column(
+        String(7),
+        nullable=False,
+        unique=True,
+        index=True,
+        # The text is the form that PostgreSQL stores. A shorter spelling
+        # works, and then "alembic check" reports a difference on every run.
+        server_default=text(
+            "lpad((nextval('items_asset_tag_seq'::regclass))::text, 7, '0'::text)"
+        ),
+    )
 
     purchase_price: Mapped[Decimal | None] = mapped_column(
         Numeric(12, 2), nullable=True

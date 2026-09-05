@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS items (
   quantity INTEGER NOT NULL DEFAULT 1,
   notes TEXT,
   owner TEXT,
+  asset_tag TEXT,
   is_lent INTEGER NOT NULL DEFAULT 0,
   lent_to TEXT,
   lent_date TEXT,
@@ -295,6 +296,7 @@ async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
   const wanted: Array<[string, string, string]> = [
     ['item_photos', 'ocr_text', 'TEXT'],
     ['items', 'owner', 'TEXT'],
+    ['items', 'asset_tag', 'TEXT'],
   ]
   for (const [table, column, type] of wanted) {
     const columns = await db.getAllAsync<{ name: string }>(
@@ -344,7 +346,8 @@ const ITEM_COLUMNS = [
   'id', 'location_id', 'name', 'description', 'category', 'subcategory', 'brand',
   'model', 'serial_number', 'barcode', 'purchase_price', 'current_value',
   'purchase_date', 'purchase_location', 'warranty_expires', 'condition',
-  'quantity', 'notes', 'owner', 'is_lent', 'lent_to', 'lent_date', 'version',
+  'quantity', 'notes', 'owner', 'asset_tag', 'is_lent', 'lent_to', 'lent_date',
+  'version',
   'created_at', 'updated_at',
 ] as const
 
@@ -369,7 +372,8 @@ export async function upsertItems(items: Item[], pending = 0): Promise<void> {
         item.subcategory, item.brand, item.model, item.serial_number, item.barcode,
         item.purchase_price, item.current_value, item.purchase_date,
         item.purchase_location, item.warranty_expires, item.condition,
-        item.quantity, item.notes, item.owner, item.is_lent ? 1 : 0, item.lent_to,
+        item.quantity, item.notes, item.owner, item.asset_tag,
+        item.is_lent ? 1 : 0, item.lent_to,
         item.lent_date, item.version, item.created_at, item.updated_at, pending,
       ])
       if (item.tags) {
@@ -407,8 +411,11 @@ export async function listItems(options: {
 
   if (options.search?.trim()) {
     const like = `%${options.search.trim()}%`
-    where.push('(name LIKE ? OR brand LIKE ? OR category LIKE ? OR serial_number LIKE ?)')
-    args.push(like, like, like, like)
+    where.push(
+      '(name LIKE ? OR brand LIKE ? OR category LIKE ? OR serial_number LIKE ?' +
+        ' OR asset_tag LIKE ?)',
+    )
+    args.push(like, like, like, like, like)
   }
   if (options.locationId) {
     where.push('location_id = ?')
@@ -427,6 +434,18 @@ export async function listItems(options: {
     ...args,
   )
   return rows.map(toItem)
+}
+
+/** The item that carries one asset tag, from the copy on the phone. */
+export async function getItemByTag(tag: string): Promise<LocalItem | null> {
+  const db = await openDatabase()
+  // A person reads "42" off a sticker that says "0000042".
+  const wanted = /^\d+$/.test(tag) ? tag.padStart(7, '0') : tag
+  const row = await db.getFirstAsync<Record<string, unknown>>(
+    'SELECT * FROM items WHERE asset_tag = ?',
+    wanted,
+  )
+  return row ? toItem(row) : null
 }
 
 export async function getItem(id: string): Promise<LocalItem | null> {

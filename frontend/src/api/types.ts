@@ -95,6 +95,8 @@ export interface Item {
   quantity: number
   notes: string | null
   owner: string | null
+  /** The number on the sticker, such as "0000042". */
+  asset_tag: string
   is_lent: boolean
   lent_to: string | null
   lent_date: string | null

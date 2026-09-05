@@ -58,6 +58,9 @@ export async function createItem(draft: ItemDraft): Promise<Item> {
     name: draft.name,
     description: draft.description ?? null,
     owner: draft.owner ?? null,
+    // The server hands the number out. Until the item reaches it, the row
+    // shows none, and the next sync fills it in.
+    asset_tag: '',
     category: draft.category ?? null,
     subcategory: draft.subcategory ?? null,
     brand: draft.brand ?? null,

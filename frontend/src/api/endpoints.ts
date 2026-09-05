@@ -77,6 +77,7 @@ export const items = {
   setPrimaryPhoto: (id: string, photoId: string) =>
     api.put<ItemPhoto[]>(`/api/items/${id}/photos/${photoId}/primary`, undefined),
   owners: () => api.get<string[]>('/api/items/owners'),
+  byTag: (tag: string) => api.get<ItemDetail>(`/api/items/by-tag/${tag}`),
   activity: (id: string) => api.get<ActivityLine[]>(`/api/items/${id}/activity`),
   lookupBarcode: (code: string) =>
     api.get<BarcodeProduct>(`/api/items/barcode/${encodeURIComponent(code)}`),

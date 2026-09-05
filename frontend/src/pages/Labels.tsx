@@ -19,8 +19,16 @@ export default function Labels() {
 
   const rows =
     kind === 'items'
-      ? (items.data?.items ?? []).map((item) => ({ id: item.id, name: item.name }))
-      : flattenTree(tree.data ?? []).map((row) => ({ id: row.id, name: row.label }))
+      ? (items.data?.items ?? []).map((item) => ({
+          id: item.id,
+          name: item.name,
+          tag: item.asset_tag,
+        }))
+      : flattenTree(tree.data ?? []).map((row) => ({
+          id: row.id,
+          name: row.label,
+          tag: null,
+        }))
 
   const toggle = (id: string) =>
     setSelected((current) =>
@@ -84,7 +92,14 @@ export default function Labels() {
                     onChange={() => toggle(row.id)}
                     className="h-4 w-4 rounded border-ink-300"
                   />
-                  <span className="truncate">{row.name}</span>
+                  <span className="truncate">
+                    {row.tag ? (
+                      <span className="mr-2 font-mono text-xs text-ink-500">
+                        {row.tag}
+                      </span>
+                    ) : null}
+                    {row.name}
+                  </span>
                 </label>
               </li>
             ))}
@@ -115,8 +130,11 @@ export default function Labels() {
                     alt={`QR code for ${row.name}`}
                     className="w-full"
                   />
-                  <figcaption className="w-full truncate text-center text-xs">
-                    {row.name}
+                  <figcaption className="w-full text-center text-xs">
+                    {row.tag ? (
+                      <span className="block font-mono text-sm">{row.tag}</span>
+                    ) : null}
+                    <span className="block truncate">{row.name}</span>
                   </figcaption>
                 </figure>
               ))}

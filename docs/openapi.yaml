@@ -1126,6 +1126,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/items/by-tag/{asset_tag}:
+    get:
+      tags:
+      - Items
+      summary: Return the item that carries this asset tag.
+      description: The tag is the number on the sticker. A QR label holds a short address that ends with
+        it, and a person can type it.
+      operationId: item_by_tag_api_items_by_tag__asset_tag__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: asset_tag
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Asset Tag
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ItemDetail_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/items/owners:
     get:
       tags:
@@ -5249,6 +5279,11 @@ components:
           - type: string
           - type: 'null'
           title: Owner
+        asset_tag:
+          type: string
+          title: Asset Tag
+          description: The number on the sticker, such as "0000042".
+          default: ''
         is_lent:
           type: boolean
           title: Is Lent
@@ -5469,6 +5504,11 @@ components:
           - type: string
           - type: 'null'
           title: Owner
+        asset_tag:
+          type: string
+          title: Asset Tag
+          description: The number on the sticker, such as "0000042".
+          default: ''
         is_lent:
           type: boolean
           title: Is Lent

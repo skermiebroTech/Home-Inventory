@@ -64,9 +64,12 @@ async def item_qr(
     png = await render_label_png(
         "item",
         item.id,
-        caption=item.name,
+        # The number goes under the code, so a person can read it out or
+        # type it when the camera will not focus.
+        caption=f"{item.asset_tag} · {item.name}",
         base_url=_base_url(request),
         width=size,
+        asset_tag=item.asset_tag,
     )
     return _png(png, f"item-{item.id}.png")
 

@@ -95,6 +95,11 @@ def _search_condition(q: str) -> ColumnElement[bool]:
         Item.brand.ilike(like),
         Item.model.ilike(like),
         Item.serial_number.ilike(like),
+        # A person who types "42" is looking for the sticker that says
+        # "0000042", so the search reaches the tag as well.
+        Item.asset_tag.ilike(f"%{q.strip().lstrip('#').zfill(7)}%")
+        if q.strip().lstrip("#").isdigit()
+        else Item.asset_tag.ilike(like),
     )
 
 
@@ -216,6 +221,43 @@ async def list_items(
     return ok(
         build_page([to_item_read(row) for row in rows], total, page, per_page, pages)
     )
+
+
+@router.get(
+    "/by-tag/{asset_tag}",
+    response_model=Envelope[ItemDetail],
+    summary="Return the item that carries this asset tag.",
+    description=(
+        "The tag is the number on the sticker. A QR label holds a short "
+        "address that ends with it, and a person can type it."
+    ),
+)
+async def item_by_tag(
+    asset_tag: str, user: CurrentUser, session: SessionDep
+) -> Envelope[ItemDetail]:
+    # A person reads "42" off a sticker that says "0000042", so pad it back.
+    wanted = asset_tag.strip().lstrip("#")
+    if wanted.isdigit():
+        wanted = wanted.zfill(7)
+
+    item = (
+        (
+            await session.execute(
+                select(Item)
+                .where(
+                    Item.asset_tag == wanted,
+                    Item.user_id == user.id,
+                    Item.deleted_at.is_(None),
+                )
+                .options(selectinload(Item.photos), selectinload(Item.tags))
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if item is None:
+        raise not_found("The asset tag")
+    return ok(await to_item_detail(session, item))
 
 
 @router.get(
