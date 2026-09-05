@@ -15,6 +15,7 @@ import { Loading } from '@/components/ui'
 import { useHealth } from '@/hooks/useSystem'
 import { useAuthStore } from '@/store/auth'
 import AddItem from '@/pages/AddItem'
+import Components from '@/pages/Components'
 import Dashboard from '@/pages/Dashboard'
 import Export from '@/pages/Export'
 import ItemDetailPage from '@/pages/ItemDetail'
@@ -27,6 +28,7 @@ import Maintenance from '@/pages/Maintenance'
 import ReceiptDetailPage from '@/pages/ReceiptDetail'
 import Receipts from '@/pages/Receipts'
 import Settings from '@/pages/Settings'
+import Spares from '@/pages/Spares'
 import Setup from '@/pages/Setup'
 import TagsPage from '@/pages/Tags'
 
@@ -77,6 +79,8 @@ export default function App() {
         <Route path="/receipts" element={<Receipts />} />
         <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
         <Route path="/tags" element={<TagsPage />} />
+        <Route path="/components" element={<Components />} />
+        <Route path="/spares" element={<Spares />} />
         <Route path="/maintenance" element={<Maintenance />} />
         <Route path="/lending" element={<Lending />} />
         <Route path="/labels" element={<Labels />} />

@@ -11,6 +11,7 @@ import * as Crypto from 'expo-crypto'
 import type { Item, MaintenanceLog } from '@/api/types'
 import {
   getItem,
+  getSpare,
   openDatabase,
   queueChange,
   queuePhoto,
@@ -139,6 +140,28 @@ export async function addMaintenance(
     next_due_date: log.next_due_date,
     cost: log.cost,
   }, null)
+}
+
+/**
+ * Take stock off the shelf, or put it back.
+ *
+ * This is the one action a consumable needs, and it must work in a shed with
+ * no signal, so it writes the count locally and queues the change.
+ */
+export async function useSpare(id: string, count = 1): Promise<number> {
+  const spare = await getSpare(id)
+  if (!spare) return 0
+  const remaining = Math.max(0, spare.quantity - count)
+
+  const db = await openDatabase()
+  await db.runAsync(
+    'UPDATE spares SET quantity = ?, pending = 1, updated_at = ? WHERE id = ?',
+    remaining,
+    now(),
+    id,
+  )
+  await queueChange('spare', 'update', id, { quantity: remaining }, spare.version)
+  return remaining
 }
 
 /** Attach a photograph. The file waits in the queue until the sync sends it. */

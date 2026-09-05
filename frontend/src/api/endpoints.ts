@@ -3,6 +3,13 @@
 import { api, download, request } from './client'
 import type {
   AiJob,
+  Component,
+  ComponentDetail,
+  ComponentWrite,
+  ItemComponent,
+  ItemComponentWrite,
+  Spare,
+  SpareWrite,
   AiStatus,
   BackupSchedule,
   BackupStatus,
@@ -182,6 +189,37 @@ export const ai = {
     form.append('file', file)
     return api.upload<AiJob>('/api/ai/receipt-parse', form)
   },
+}
+
+// --- Components, fitted parts, and spares ---
+
+export const components = {
+  list: (query: { q?: string; category?: string; consumable?: boolean } = {}) =>
+    api.get<Component[]>('/api/components', query),
+  get: (id: string) => api.get<ComponentDetail>(`/api/components/${id}`),
+  create: (body: ComponentWrite) => api.post<Component>('/api/components', body),
+  update: (id: string, body: Partial<ComponentWrite>) =>
+    api.put<Component>(`/api/components/${id}`, body),
+  remove: (id: string) => api.delete<Message>(`/api/components/${id}`),
+
+  forItem: (itemId: string) => api.get<ItemComponent[]>(`/api/items/${itemId}/components`),
+  fit: (itemId: string, body: ItemComponentWrite) =>
+    api.post<ItemComponent>(`/api/items/${itemId}/components`, body),
+  updateFitted: (fittedId: string, body: Partial<Omit<ItemComponentWrite, 'component_id'>>) =>
+    api.put<ItemComponent>(`/api/item-components/${fittedId}`, body),
+  removeFitted: (fittedId: string) =>
+    api.delete<Message>(`/api/item-components/${fittedId}`),
+}
+
+export const spares = {
+  list: (query: { low_only?: boolean; consumable?: boolean } = {}) =>
+    api.get<Spare[]>('/api/spares', query),
+  create: (body: SpareWrite) => api.post<Spare>('/api/spares', body),
+  update: (id: string, body: Partial<Omit<SpareWrite, 'component_id'>>) =>
+    api.put<Spare>(`/api/spares/${id}`, body),
+  use: (id: string, count = 1, note?: string) =>
+    api.post<Spare>(`/api/spares/${id}/use`, { count, note }),
+  remove: (id: string) => api.delete<Message>(`/api/spares/${id}`),
 }
 
 // --- Health, dashboard, export, and backup ---

@@ -399,3 +399,106 @@ export interface BackupStatus {
   backups: BackupFile[]
   backup_dir: string
 }
+
+// --- Components ---
+
+export interface Component {
+  id: string
+  user_id: string
+  name: string
+  brand: string | null
+  model_number: string | null
+  category: string | null
+  description: string | null
+  /** What one costs, when the fitted part names no price. */
+  default_price: string | null
+  is_consumable: boolean
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ComponentUse {
+  item_id: string
+  item_name: string
+  quantity: number
+}
+
+export interface ComponentDetail extends Component {
+  fitted_count: number
+  spare_quantity: number
+  fitted_to: ComponentUse[]
+}
+
+export interface ComponentWrite {
+  name: string
+  brand?: string | null
+  model_number?: string | null
+  category?: string | null
+  description?: string | null
+  default_price?: string | null
+  is_consumable?: boolean
+}
+
+export interface ItemComponent {
+  id: string
+  item_id: string
+  component_id: string
+  quantity: number
+  /** What this one cost. Null means the default price of the catalogue. */
+  price: string | null
+  serial_number: string | null
+  fitted_on: string | null
+  notes: string | null
+  version: number
+  created_at: string
+  updated_at: string
+  name: string
+  brand: string | null
+  model_number: string | null
+  is_consumable: boolean
+  default_price: string | null
+  effective_price: string | null
+  line_total: string | null
+}
+
+export interface ItemComponentWrite {
+  component_id: string
+  quantity?: number
+  price?: string | null
+  serial_number?: string | null
+  fitted_on?: string | null
+  notes?: string | null
+}
+
+export interface Spare {
+  id: string
+  user_id: string
+  component_id: string
+  location_id: string | null
+  quantity: number
+  minimum_quantity: number
+  unit_price: string | null
+  notes: string | null
+  version: number
+  created_at: string
+  updated_at: string
+  name: string
+  brand: string | null
+  model_number: string | null
+  is_consumable: boolean
+  default_price: string | null
+  effective_price: string | null
+  stock_value: string | null
+  location_name: string | null
+  is_low: boolean
+}
+
+export interface SpareWrite {
+  component_id: string
+  quantity?: number
+  minimum_quantity?: number
+  location_id?: string | null
+  unit_price?: string | null
+  notes?: string | null
+}

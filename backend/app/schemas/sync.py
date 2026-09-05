@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.component import ComponentRead, ItemComponentRow, SpareRow
 from app.schemas.custom_field import CustomFieldRead
 from app.schemas.item import ItemPhotoRead, ItemRead
 from app.schemas.location import LocationRead
@@ -27,6 +28,9 @@ class SyncEntity(StrEnum):
     RECEIPT = "receipt"
     MAINTENANCE = "maintenance"
     CUSTOM_FIELD = "custom_field"
+    COMPONENT = "component"
+    ITEM_COMPONENT = "item_component"
+    SPARE = "spare"
 
 
 class SyncOp(StrEnum):
@@ -56,6 +60,9 @@ class SyncChanges(BaseModel):
     receipts: list[ReceiptRead] = Field(default_factory=list)
     maintenance_logs: list[MaintenanceRead] = Field(default_factory=list)
     custom_fields: list[CustomFieldRead] = Field(default_factory=list)
+    components: list[ComponentRead] = Field(default_factory=list)
+    item_components: list[ItemComponentRow] = Field(default_factory=list)
+    spares: list[SpareRow] = Field(default_factory=list)
     deleted: dict[SyncEntity, list[uuid.UUID]] = Field(default_factory=dict)
     has_more: bool = Field(
         default=False,

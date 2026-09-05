@@ -2,6 +2,7 @@
 
 import {
   Boxes,
+  Cog,
   Download,
   Home,
   LogOut,
@@ -9,6 +10,7 @@ import {
   Menu,
   Moon,
   QrCode,
+  Package,
   Receipt,
   Search,
   Settings,
@@ -33,6 +35,8 @@ const NAV: Array<{ to: string; label: string; icon: ReactNode }> = [
   { to: '/locations', label: 'Locations', icon: <MapPinned className="h-4 w-4" /> },
   { to: '/receipts', label: 'Receipts', icon: <Receipt className="h-4 w-4" /> },
   { to: '/tags', label: 'Tags', icon: <Tags className="h-4 w-4" /> },
+  { to: '/components', label: 'Components', icon: <Cog className="h-4 w-4" /> },
+  { to: '/spares', label: 'Spares', icon: <Package className="h-4 w-4" /> },
   { to: '/maintenance', label: 'Maintenance', icon: <Wrench className="h-4 w-4" /> },
   { to: '/lending', label: 'Lending', icon: <HandHelping className="h-4 w-4" /> },
   { to: '/labels', label: 'Labels', icon: <QrCode className="h-4 w-4" /> },

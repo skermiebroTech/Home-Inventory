@@ -433,6 +433,465 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/components:
+    get:
+      tags:
+      - Components
+      summary: List the component catalogue.
+      operationId: list_components_api_components_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Match the name, brand, or model.
+          title: Q
+        description: Match the name, brand, or model.
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      - name: consumable
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Consumable
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ComponentRead__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Components
+      summary: Add one kind of part to the catalogue.
+      operationId: create_component_api_components_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComponentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ComponentRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/components/{component_id}:
+    get:
+      tags:
+      - Components
+      summary: Return one catalogue entry, with where it is used.
+      operationId: get_component_api_components__component_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Component Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ComponentDetail_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - Components
+      summary: Change a catalogue entry.
+      operationId: update_component_api_components__component_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Component Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComponentUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ComponentRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Components
+      summary: Delete a catalogue entry.
+      description: An entry that an item still uses cannot go. Remove it from those items first, or the
+        history of what they are made of would break.
+      operationId: delete_component_api_components__component_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: component_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Component Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/items/{item_id}/components:
+    get:
+      tags:
+      - Components
+      summary: List what one item is made of.
+      operationId: list_item_components_api_items__item_id__components_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ItemComponentRead__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Components
+      summary: Fit a component to an item.
+      operationId: add_item_component_api_items__item_id__components_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemComponentWrite'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ItemComponentRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/item-components/{fitted_id}:
+    put:
+      tags:
+      - Components
+      summary: Change a fitted component.
+      operationId: update_item_component_api_item_components__fitted_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: fitted_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Fitted Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemComponentUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ItemComponentRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Components
+      summary: Take a component off an item.
+      operationId: remove_item_component_api_item_components__fitted_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: fitted_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Fitted Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/spares:
+    get:
+      tags:
+      - Components
+      summary: List the spare parts and the consumables on the shelf.
+      description: The rows that ran low come first.
+      operationId: list_spares_api_spares_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: low_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Only the rows that ran low.
+          default: false
+          title: Low Only
+        description: Only the rows that ran low.
+      - name: consumable
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Consumable
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_SpareRead__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Components
+      summary: Put stock of a component on the shelf.
+      operationId: create_spare_api_spares_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpareWrite'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_SpareRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/spares/{spare_id}:
+    put:
+      tags:
+      - Components
+      summary: Change a row of stock.
+      operationId: update_spare_api_spares__spare_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: spare_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Spare Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpareUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_SpareRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Components
+      summary: Remove a row of stock.
+      operationId: delete_spare_api_spares__spare_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: spare_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Spare Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/spares/{spare_id}/use:
+    post:
+      tags:
+      - Components
+      summary: Take stock off the shelf.
+      description: 'This is the one action a consumable needs: you fitted a filter, so the count goes
+        down by one. A negative count puts stock back.'
+      operationId: use_spare_api_spares__spare_id__use_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: spare_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Spare Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpareUse'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_SpareRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/items:
     get:
       tags:
@@ -2239,6 +2698,137 @@ components:
       required:
       - file
       title: Body_upload_receipt_api_receipts_upload_post
+    ComponentCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        brand:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Model Number
+        category:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        default_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Default Price
+          description: What one costs, when the fitted part names no price.
+        is_consumable:
+          type: boolean
+          title: Is Consumable
+          description: A filter or a blade runs out. A gearbox does not.
+          default: false
+      type: object
+      required:
+      - name
+      title: ComponentCreate
+      description: Add one kind of part to the catalogue.
+    ComponentDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        name:
+          type: string
+          title: Name
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Number
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        default_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Price
+        is_consumable:
+          type: boolean
+          title: Is Consumable
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        fitted_count:
+          type: integer
+          title: Fitted Count
+          description: How many items carry this component.
+          default: 0
+        spare_quantity:
+          type: integer
+          title: Spare Quantity
+          description: How many are on the shelf.
+          default: 0
+        fitted_to:
+          items:
+            $ref: '#/components/schemas/ComponentUse'
+          type: array
+          title: Fitted To
+      type: object
+      required:
+      - id
+      - user_id
+      - name
+      - brand
+      - model_number
+      - category
+      - description
+      - default_price
+      - is_consumable
+      - version
+      - created_at
+      - updated_at
+      title: ComponentDetail
+      description: One catalogue entry, with where it is used and what is on the shelf.
     ComponentHealth:
       properties:
         ok:
@@ -2259,6 +2849,140 @@ components:
       - ok
       title: ComponentHealth
       description: The state of one dependency.
+    ComponentRead:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        name:
+          type: string
+          title: Name
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Number
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        default_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Price
+        is_consumable:
+          type: boolean
+          title: Is Consumable
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - user_id
+      - name
+      - brand
+      - model_number
+      - category
+      - description
+      - default_price
+      - is_consumable
+      - version
+      - created_at
+      - updated_at
+      title: ComponentRead
+      description: One catalogue entry.
+    ComponentUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Name
+        brand:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Model Number
+        category:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        default_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Default Price
+        is_consumable:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Consumable
+      type: object
+      title: ComponentUpdate
+      description: Change a catalogue entry. Every field is optional.
+    ComponentUse:
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        item_name:
+          type: string
+          title: Item Name
+        quantity:
+          type: integer
+          title: Quantity
+      type: object
+      required:
+      - item_id
+      - item_name
+      - quantity
+      title: ComponentUse
+      description: One item that carries this component.
     CustomFieldRead:
       properties:
         id:
@@ -2414,6 +3138,30 @@ components:
           - type: 'null'
       type: object
       title: Envelope[BarcodeProduct]
+    Envelope_ComponentDetail_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/ComponentDetail'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[ComponentDetail]
+    Envelope_ComponentRead_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/ComponentRead'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[ComponentRead]
     Envelope_DashboardSummary_:
       properties:
         data:
@@ -2438,6 +3186,18 @@ components:
           - type: 'null'
       type: object
       title: Envelope[HealthStatus]
+    Envelope_ItemComponentRead_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/ItemComponentRead'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[ItemComponentRead]
     Envelope_ItemDetail_:
       properties:
         data:
@@ -2546,6 +3306,18 @@ components:
           - type: 'null'
       type: object
       title: Envelope[ReceiptDetail]
+    Envelope_SpareRead_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/SpareRead'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[SpareRead]
     Envelope_SyncChanges_:
       properties:
         data:
@@ -2606,6 +3378,36 @@ components:
           - type: 'null'
       type: object
       title: Envelope[UserRead]
+    Envelope_list_ComponentRead__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ComponentRead'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[ComponentRead]]
+    Envelope_list_ItemComponentRead__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ItemComponentRead'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[ItemComponentRead]]
     Envelope_list_ItemDetail__:
       properties:
         data:
@@ -2696,6 +3498,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[list[MaintenanceRead]]
+    Envelope_list_SpareRead__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/SpareRead'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[SpareRead]]
     Envelope_list_TagRead__:
       properties:
         data:
@@ -2794,6 +3611,250 @@ components:
       - items
       title: ItemBulkCreate
       description: Create many items at once, after an AI scan.
+    ItemComponentRead:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        quantity:
+          type: integer
+          title: Quantity
+        price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Price
+        serial_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serial Number
+        fitted_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fitted On
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        name:
+          type: string
+          title: Name
+          default: ''
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Number
+        is_consumable:
+          type: boolean
+          title: Is Consumable
+          default: false
+        default_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Price
+        effective_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Effective Price
+          description: The price of this one, or the default when it has none.
+        line_total:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Line Total
+          description: The effective price times the quantity.
+      type: object
+      required:
+      - id
+      - item_id
+      - component_id
+      - quantity
+      - price
+      - serial_number
+      - fitted_on
+      - notes
+      - version
+      - created_at
+      - updated_at
+      title: ItemComponentRead
+      description: One fitted component, with the catalogue fields joined in.
+    ItemComponentRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        quantity:
+          type: integer
+          title: Quantity
+        price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Price
+        serial_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serial Number
+        fitted_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fitted On
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - item_id
+      - component_id
+      - quantity
+      - price
+      - serial_number
+      - fitted_on
+      - notes
+      - version
+      - created_at
+      - updated_at
+      title: ItemComponentRow
+      description: 'One fitted component, exactly as the table holds it.
+
+
+        The sync endpoint sends this. The phone holds the catalogue too, so it
+
+        joins the name itself.'
+    ItemComponentUpdate:
+      properties:
+        quantity:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Quantity
+        price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Price
+        serial_number:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Serial Number
+        fitted_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fitted On
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: ItemComponentUpdate
+      description: Change a fitted component. Every field is optional.
+    ItemComponentWrite:
+      properties:
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        quantity:
+          type: integer
+          minimum: 1.0
+          title: Quantity
+          default: 1
+        price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Price
+          description: What this one cost. Leave empty to use the default price.
+        serial_number:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Serial Number
+        fitted_on:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fitted On
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - component_id
+      title: ItemComponentWrite
+      description: Fit a component to an item, or change the one that is fitted.
     ItemCreate:
       properties:
         name:
@@ -4436,6 +5497,264 @@ components:
       - password
       title: RegisterRequest
       description: The body of POST /api/auth/register.
+    SpareRead:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        quantity:
+          type: integer
+          title: Quantity
+        minimum_quantity:
+          type: integer
+          title: Minimum Quantity
+        unit_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        name:
+          type: string
+          title: Name
+          default: ''
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        model_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Number
+        is_consumable:
+          type: boolean
+          title: Is Consumable
+          default: false
+        default_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Default Price
+        effective_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Effective Price
+        stock_value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stock Value
+          description: The effective price times the quantity.
+        location_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Name
+        is_low:
+          type: boolean
+          title: Is Low
+          description: True when the count reached the minimum.
+          default: false
+      type: object
+      required:
+      - id
+      - user_id
+      - component_id
+      - location_id
+      - quantity
+      - minimum_quantity
+      - unit_price
+      - notes
+      - version
+      - created_at
+      - updated_at
+      title: SpareRead
+      description: One row of stock, with the catalogue fields joined in.
+    SpareRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        quantity:
+          type: integer
+          title: Quantity
+        minimum_quantity:
+          type: integer
+          title: Minimum Quantity
+        unit_price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - user_id
+      - component_id
+      - location_id
+      - quantity
+      - minimum_quantity
+      - unit_price
+      - notes
+      - version
+      - created_at
+      - updated_at
+      title: SpareRow
+      description: One row of stock, exactly as the table holds it.
+    SpareUpdate:
+      properties:
+        quantity:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Quantity
+        minimum_quantity:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Minimum Quantity
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Unit Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: SpareUpdate
+      description: Change a spare. Every field is optional.
+    SpareUse:
+      properties:
+        count:
+          type: integer
+          title: Count
+          description: How many to take. A negative number puts stock back.
+          default: 1
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+      type: object
+      title: SpareUse
+      description: Take stock off the shelf, or put it back.
+    SpareWrite:
+      properties:
+        component_id:
+          type: string
+          format: uuid
+          title: Component Id
+        quantity:
+          type: integer
+          minimum: 0.0
+          title: Quantity
+          default: 0
+        minimum_quantity:
+          type: integer
+          minimum: 0.0
+          title: Minimum Quantity
+          description: Below this count the list asks you to buy more. Zero is off.
+          default: 0
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Unit Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - component_id
+      title: SpareWrite
+      description: Put stock of a component on the shelf.
     SyncChange:
       properties:
         entity:
@@ -4519,6 +5838,21 @@ components:
             $ref: '#/components/schemas/CustomFieldRead'
           type: array
           title: Custom Fields
+        components:
+          items:
+            $ref: '#/components/schemas/ComponentRead'
+          type: array
+          title: Components
+        item_components:
+          items:
+            $ref: '#/components/schemas/ItemComponentRow'
+          type: array
+          title: Item Components
+        spares:
+          items:
+            $ref: '#/components/schemas/SpareRow'
+          type: array
+          title: Spares
         deleted:
           additionalProperties:
             items:
@@ -4584,6 +5918,9 @@ components:
       - receipt
       - maintenance
       - custom_field
+      - component
+      - item_component
+      - spare
       title: SyncEntity
       description: The tables that the mobile application mirrors.
     SyncError:

@@ -26,6 +26,7 @@ from app.models.base import Base, SyncMixin, TimestampMixin, UUIDMixin
 from app.models.tag import item_tags
 
 if TYPE_CHECKING:
+    from app.models.component import ItemComponent
     from app.models.custom_field import CustomField
     from app.models.location import Location
     from app.models.maintenance import MaintenanceLog
@@ -120,6 +121,12 @@ class Item(UUIDMixin, TimestampMixin, SyncMixin, Base):
     )
     custom_fields: Mapped[list[CustomField]] = relationship(
         back_populates="item", cascade="all, delete-orphan", passive_deletes=True
+    )
+    components: Mapped[list[ItemComponent]] = relationship(
+        back_populates="item",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ItemComponent.created_at",
     )
     nfc_tags: Mapped[list[NfcTag]] = relationship(
         back_populates="item", cascade="all, delete-orphan", passive_deletes=True

@@ -5,7 +5,14 @@ import { useCallback, useState } from 'react'
 import { Alert, ScrollView, Switch, View } from 'react-native'
 
 import { Body, Button, Caption, Card, ListRow, Screen, Title } from '@/components/ui'
-import { listItems, listLocations, listMaintenance, listTags, resetDatabase } from '@/db'
+import {
+  listItems,
+  listLocations,
+  listMaintenance,
+  listSpares,
+  listTags,
+  resetDatabase,
+} from '@/db'
 import { plural, relativeTime } from '@/lib/format'
 import { NfcUnavailableError, scanAndLookup } from '@/lib/nfc'
 import { clearReminders, scheduleReminders } from '@/lib/notifications'
@@ -20,22 +27,32 @@ export default function More() {
   const { user, serverUrl, signOut } = useAuthStore()
   const settings = useSettingsStore()
   const sync = useSyncStore()
-  const [counts, setCounts] = useState({ locations: 0, tags: 0, lent: 0, due: 0 })
+  const [counts, setCounts] = useState({
+    locations: 0,
+    tags: 0,
+    lent: 0,
+    due: 0,
+    spares: 0,
+    lowSpares: 0,
+  })
 
   useFocusEffect(
     useCallback(() => {
       void (async () => {
-        const [locations, tags, items, logs] = await Promise.all([
+        const [locations, tags, items, logs, spares] = await Promise.all([
           listLocations(),
           listTags(),
           listItems({ limit: 500 }),
           listMaintenance(),
+          listSpares(),
         ])
         setCounts({
           locations: locations.length,
           tags: tags.length,
           lent: items.filter((item) => item.is_lent).length,
           due: logs.filter((log) => log.next_due_date !== null).length,
+          spares: spares.length,
+          lowSpares: spares.filter((spare) => spare.is_low).length,
         })
       })()
     }, []),
@@ -83,6 +100,16 @@ export default function More() {
             subtitle={`${plural(counts.due, 'date')} recorded`}
             icon="construct"
             onPress={() => router.push('/(tabs)/home')}
+          />
+          <ListRow
+            title="Spares"
+            subtitle={
+              counts.lowSpares > 0
+                ? `${plural(counts.spares, 'row')}, ${counts.lowSpares} running low`
+                : plural(counts.spares, 'row')
+            }
+            icon="cube"
+            onPress={() => router.push('/spares')}
           />
           <ListRow
             title="Read an NFC tag"

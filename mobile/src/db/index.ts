@@ -8,7 +8,21 @@
 
 import * as SQLite from 'expo-sqlite'
 
-import type { Item, ItemPhoto, Location, MaintenanceLog, Receipt, SyncEntity, SyncOp, Tag } from '@/api/types'
+import type {
+  Component,
+  FittedComponent,
+  Item,
+  ItemComponentRow,
+  ItemPhoto,
+  Location,
+  MaintenanceLog,
+  Receipt,
+  SpareRow,
+  SpareWithComponent,
+  SyncEntity,
+  SyncOp,
+  Tag,
+} from '@/api/types'
 
 const DATABASE_NAME = 'homestock.db'
 
@@ -110,6 +124,47 @@ CREATE TABLE IF NOT EXISTS maintenance_logs (
 );
 CREATE INDEX IF NOT EXISTS ix_logs_item ON maintenance_logs(item_id);
 
+CREATE TABLE IF NOT EXISTS components (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  brand TEXT,
+  model_number TEXT,
+  category TEXT,
+  description TEXT,
+  default_price TEXT,
+  is_consumable INTEGER NOT NULL DEFAULT 0,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS item_components (
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL,
+  component_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  price TEXT,
+  serial_number TEXT,
+  fitted_on TEXT,
+  notes TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT,
+  pending INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_item_components_item ON item_components(item_id);
+
+CREATE TABLE IF NOT EXISTS spares (
+  id TEXT PRIMARY KEY,
+  component_id TEXT NOT NULL,
+  location_id TEXT,
+  quantity INTEGER NOT NULL DEFAULT 0,
+  minimum_quantity INTEGER NOT NULL DEFAULT 0,
+  unit_price TEXT,
+  notes TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT,
+  pending INTEGER NOT NULL DEFAULT 0
+);
+
 -- Every change made while offline waits here.
 CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,12 +194,40 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `
 
+/**
+ * The number of the local schema for the synced tables.
+ *
+ * A pull asks only for the rows that changed after the last sync. When a new
+ * version of the application adds a table, an older install would never see
+ * the rows that the server already holds. A change of this number clears the
+ * watermark, so the next pull brings everything down one time.
+ */
+const SYNC_SCHEMA = '2'
+
 export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (database) return database
   database = await SQLite.openDatabaseAsync(DATABASE_NAME)
   await database.execAsync(SCHEMA)
   await addMissingColumns(database)
+  await fullPullAfterSchemaChange(database)
   return database
+}
+
+/** Clear the sync watermark when this application added a synced table. */
+async function fullPullAfterSchemaChange(db: SQLite.SQLiteDatabase): Promise<void> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM meta WHERE key = ?',
+    'sync_schema',
+  )
+  if (row?.value === SYNC_SCHEMA) return
+  await db.runAsync('DELETE FROM meta WHERE key = ?', 'last_sync')
+  await db.runAsync(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = ?`,
+    'sync_schema',
+    SYNC_SCHEMA,
+    SYNC_SCHEMA,
+  )
 }
 
 /**
@@ -172,6 +255,7 @@ export async function resetDatabase(): Promise<void> {
     DELETE FROM items; DELETE FROM item_photos; DELETE FROM locations;
     DELETE FROM tags; DELETE FROM item_tags; DELETE FROM receipts;
     DELETE FROM maintenance_logs; DELETE FROM outbox; DELETE FROM photo_queue;
+    DELETE FROM components; DELETE FROM item_components; DELETE FROM spares;
     DELETE FROM meta;
   `)
 }
@@ -398,6 +482,131 @@ export async function listMaintenance(itemId?: string): Promise<MaintenanceLog[]
   return db.getAllAsync<MaintenanceLog>(
     'SELECT * FROM maintenance_logs WHERE next_due_date IS NOT NULL ORDER BY next_due_date',
   )
+}
+
+// --- Components ---
+
+export async function upsertComponents(rows: Component[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO components
+       (id, name, brand, model_number, category, description, default_price,
+        is_consumable, version, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      row.id, row.name, row.brand, row.model_number, row.category,
+      row.description, row.default_price, row.is_consumable ? 1 : 0,
+      row.version, row.updated_at,
+    )
+  }
+}
+
+export async function upsertItemComponents(rows: ItemComponentRow[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO item_components
+       (id, item_id, component_id, quantity, price, serial_number, fitted_on,
+        notes, version, updated_at, pending)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      row.id, row.item_id, row.component_id, row.quantity, row.price,
+      row.serial_number, row.fitted_on, row.notes, row.version, row.updated_at,
+    )
+  }
+}
+
+export async function upsertSpares(rows: SpareRow[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO spares
+       (id, component_id, location_id, quantity, minimum_quantity, unit_price,
+        notes, version, updated_at, pending)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      row.id, row.component_id, row.location_id, row.quantity,
+      row.minimum_quantity, row.unit_price, row.notes, row.version,
+      row.updated_at,
+    )
+  }
+}
+
+function effectivePrice(own: string | null, fallback: string | null): string | null {
+  return own ?? fallback
+}
+
+/** The components fitted to one item, with the catalogue joined in. */
+export async function listItemComponents(itemId: string): Promise<FittedComponent[]> {
+  const db = await openDatabase()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT ic.*, c.name AS c_name, c.brand AS c_brand,
+            c.model_number AS c_model, c.is_consumable AS c_consumable,
+            c.default_price AS c_default
+       FROM item_components ic
+       JOIN components c ON c.id = ic.component_id
+      WHERE ic.item_id = ?
+      ORDER BY c.name COLLATE NOCASE`,
+    itemId,
+  )
+  return rows.map((row) => {
+    const price = effectivePrice(
+      (row.price as string | null) ?? null,
+      (row.c_default as string | null) ?? null,
+    )
+    const quantity = Number(row.quantity ?? 1)
+    return {
+      ...(row as unknown as ItemComponentRow),
+      quantity,
+      name: String(row.c_name ?? ''),
+      brand: (row.c_brand as string | null) ?? null,
+      model_number: (row.c_model as string | null) ?? null,
+      is_consumable: Boolean(row.c_consumable),
+      effective_price: price,
+      line_total: price ? Number.parseFloat(price) * quantity : 0,
+    }
+  })
+}
+
+/** Every row of stock, with the catalogue joined in. What ran low is first. */
+export async function listSpares(): Promise<SpareWithComponent[]> {
+  const db = await openDatabase()
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT s.*, c.name AS c_name, c.brand AS c_brand,
+            c.model_number AS c_model, c.is_consumable AS c_consumable,
+            c.default_price AS c_default
+       FROM spares s
+       JOIN components c ON c.id = s.component_id
+      ORDER BY c.name COLLATE NOCASE`,
+  )
+  const spares = rows.map((row) => {
+    const quantity = Number(row.quantity ?? 0)
+    const minimum = Number(row.minimum_quantity ?? 0)
+    return {
+      ...(row as unknown as SpareRow),
+      quantity,
+      minimum_quantity: minimum,
+      name: String(row.c_name ?? ''),
+      brand: (row.c_brand as string | null) ?? null,
+      model_number: (row.c_model as string | null) ?? null,
+      is_consumable: Boolean(row.c_consumable),
+      effective_price: effectivePrice(
+        (row.unit_price as string | null) ?? null,
+        (row.c_default as string | null) ?? null,
+      ),
+      is_low: minimum > 0 && quantity <= minimum,
+    }
+  })
+  spares.sort(
+    (left, right) =>
+      Number(right.is_low) - Number(left.is_low) ||
+      left.name.localeCompare(right.name),
+  )
+  return spares
+}
+
+export async function getSpare(id: string): Promise<SpareRow | null> {
+  const db = await openDatabase()
+  const row = await db.getFirstAsync<SpareRow>('SELECT * FROM spares WHERE id = ?', id)
+  return row ?? null
 }
 
 // --- The outbox ---

@@ -12,10 +12,13 @@ import { create } from 'zustand'
 
 import { connectTokens, request } from '@/api/client'
 import type { TokenPair, User } from '@/api/types'
+import { getMeta, resetDatabase, setMeta } from '@/db'
 
 const ACCESS_KEY = 'homestock.access'
 const REFRESH_KEY = 'homestock.refresh'
 const SERVER_KEY = 'homestock.server'
+/** The account that the rows in SQLite belong to. */
+const OWNER_KEY = 'owner'
 
 interface AuthState {
   serverUrl: string
@@ -27,6 +30,21 @@ interface AuthState {
   signIn: (server: string, email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   setTokens: (access: string, refresh: string) => void
+}
+
+/**
+ * Give the local cache to the account that signed in.
+ *
+ * Two accounts on one phone must not mix. When a different person signs in,
+ * the items of the last person go, and so do the changes they queued. The
+ * cache of an install that never recorded an owner stays, because it belongs
+ * to the same person: only the name is new.
+ */
+async function claimTheCache(userId: string): Promise<void> {
+  const owner = await getMeta(OWNER_KEY)
+  if (owner === userId) return
+  if (owner !== null) await resetDatabase()
+  await setMeta(OWNER_KEY, userId)
 }
 
 async function save(key: string, value: string | null): Promise<void> {
@@ -55,7 +73,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
     if (access) {
       try {
-        set({ user: await request<User>('/api/auth/me') })
+        const user = await request<User>('/api/auth/me')
+        set({ user })
+        await setMeta(OWNER_KEY, user.id)
       } catch {
         // The token is old, or the server is away. The cached data still
         // shows, and the next sync tries again.
@@ -77,7 +97,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await save(ACCESS_KEY, pair.access_token)
     await save(REFRESH_KEY, pair.refresh_token)
     set({ accessToken: pair.access_token, refreshToken: pair.refresh_token })
-    set({ user: await request<User>('/api/auth/me') })
+
+    const user = await request<User>('/api/auth/me')
+    set({ user })
+    await claimTheCache(user.id)
   },
 
   signOut: async () => {

@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import ItemForm, { itemToValues, type ItemFormValues } from '@/components/ItemForm'
+import ItemComponents from '@/components/ItemComponents'
 import PhotoUploader from '@/components/PhotoUploader'
 import QrImage from '@/components/QrImage'
 import { TagList } from '@/components/pickers'
@@ -158,6 +159,10 @@ export default function ItemDetailPage() {
           <Card>
             <h2 className="mb-3 text-sm font-semibold">Photographs</h2>
             <PhotoUploader itemId={item.id} photos={item.photos} />
+          </Card>
+
+          <Card>
+            <ItemComponents itemId={item.id} />
           </Card>
 
           <Card>

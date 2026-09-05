@@ -9,9 +9,15 @@ import { Alert, ScrollView, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 
 import { mediaUrl } from '@/api/client'
-import type { ItemPhoto, MaintenanceLog } from '@/api/types'
+import type { FittedComponent, ItemPhoto, MaintenanceLog } from '@/api/types'
 import { Badge, Body, Button, Caption, Card, Field, Input, Loading, Screen, Title } from '@/components/ui'
-import { getItem, getItemPhotos, listMaintenance, type LocalItem } from '@/db'
+import {
+  getItem,
+  getItemPhotos,
+  listItemComponents,
+  listMaintenance,
+  type LocalItem,
+} from '@/db'
 import { daysUntil, formatDate, formatMoney } from '@/lib/format'
 import { NfcUnavailableError, scanAndRegister } from '@/lib/nfc'
 import {
@@ -33,6 +39,7 @@ export default function ItemScreen() {
   const [item, setItem] = useState<LocalItem | null>(null)
   const [photos, setPhotos] = useState<ItemPhoto[]>([])
   const [logs, setLogs] = useState<MaintenanceLog[]>([])
+  const [parts, setParts] = useState<FittedComponent[]>([])
   const [borrower, setBorrower] = useState('')
   const [showLend, setShowLend] = useState(false)
   const [work, setWork] = useState('')
@@ -43,6 +50,7 @@ export default function ItemScreen() {
     setItem(await getItem(id))
     setPhotos(await getItemPhotos(id))
     setLogs(await listMaintenance(id))
+    setParts(await listItemComponents(id))
   }, [id])
 
   useFocusEffect(
@@ -217,6 +225,40 @@ export default function ItemScreen() {
           />
           <Detail label="Notes" value={item.notes} />
         </Card>
+
+        {parts.length > 0 ? (
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Body weight="600">Components</Body>
+              <View style={{ flex: 1 }} />
+              <Caption>
+                {formatMoney(parts.reduce((sum, part) => sum + part.line_total, 0))}
+              </Caption>
+            </View>
+
+            <View style={{ marginTop: spacing.sm, gap: spacing.md }}>
+              {parts.map((part) => (
+                <View key={part.id}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Body weight="500">
+                      {part.quantity > 1 ? `${part.quantity}x ` : ''}
+                      {part.name}
+                    </Body>
+                    <View style={{ flex: 1 }} />
+                    <Body>{formatMoney(part.line_total)}</Body>
+                  </View>
+                  <Caption>
+                    {[part.brand, part.model_number].filter(Boolean).join(' · ') ||
+                      'No brand'}
+                    {part.serial_number ? ` · serial ${part.serial_number}` : ''}
+                    {part.price ? ' · own price' : ' · default price'}
+                  </Caption>
+                  {part.notes ? <Caption>{part.notes}</Caption> : null}
+                </View>
+              ))}
+            </View>
+          </Card>
+        ) : null}
 
         <Card style={{ padding: 0 }}>
           <View style={{ padding: spacing.lg, flexDirection: 'row', alignItems: 'center' }}>

@@ -234,6 +234,9 @@ export type SyncEntity =
   | 'receipt'
   | 'maintenance'
   | 'custom_field'
+  | 'component'
+  | 'item_component'
+  | 'spare'
 
 export type SyncOp = 'create' | 'update' | 'delete'
 
@@ -247,6 +250,9 @@ export interface SyncChanges {
   receipts: Receipt[]
   maintenance_logs: MaintenanceLog[]
   custom_fields: Array<Record<string, unknown>>
+  components: Component[]
+  item_components: ItemComponentRow[]
+  spares: SpareRow[]
   deleted: Partial<Record<SyncEntity, string[]>>
   has_more: boolean
 }
@@ -267,4 +273,71 @@ export interface SyncPushResult {
   /** Changes that never applied. The phone keeps these and tries again. */
   errors: Array<{ entity: SyncEntity; id: string; message: string }>
   server_time: string
+}
+
+// --- Components ---
+
+export interface Component {
+  id: string
+  user_id: string
+  name: string
+  brand: string | null
+  model_number: string | null
+  category: string | null
+  description: string | null
+  default_price: string | null
+  is_consumable: boolean
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** One component fitted to one item, as the table holds it. */
+export interface ItemComponentRow {
+  id: string
+  item_id: string
+  component_id: string
+  quantity: number
+  price: string | null
+  serial_number: string | null
+  fitted_on: string | null
+  notes: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** One row of stock, as the table holds it. */
+export interface SpareRow {
+  id: string
+  user_id: string
+  component_id: string
+  location_id: string | null
+  quantity: number
+  minimum_quantity: number
+  unit_price: string | null
+  notes: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** A fitted component with the catalogue joined in, for the screens. */
+export interface FittedComponent extends ItemComponentRow {
+  name: string
+  brand: string | null
+  model_number: string | null
+  is_consumable: boolean
+  effective_price: string | null
+  line_total: number
+}
+
+/** A row of stock with the catalogue joined in. */
+export interface SpareWithComponent extends SpareRow {
+  name: string
+  brand: string | null
+  model_number: string | null
+  is_consumable: boolean
+  effective_price: string | null
+  is_low: boolean
 }

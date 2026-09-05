@@ -13,6 +13,7 @@ from app.routers import (
     ai,
     auth,
     backup,
+    components,
     export,
     health,
     items,
@@ -32,6 +33,7 @@ ALL_ROUTERS: list[APIRouter] = [
     lending.router,  # Must precede items: it owns /api/items/lent.
     maintenance.router,  # Owns /api/items/{item_id}/maintenance.
     labels.router,  # Owns /api/items/{item_id}/qr.
+    components.router,  # Owns /api/items/{item_id}/components.
     items.router,
     locations.router,
     tags.router,

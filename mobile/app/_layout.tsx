@@ -84,6 +84,10 @@ export default function RootLayout() {
               name="receipts/[id]"
               options={{ headerShown: true, title: 'Receipt' }}
             />
+            <Stack.Screen
+              name="spares"
+              options={{ headerShown: true, title: 'Spares' }}
+            />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

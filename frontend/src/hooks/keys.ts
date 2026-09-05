@@ -18,4 +18,9 @@ export const keys = {
   aiStatus: () => ['ai-status'] as const,
   aiJob: (id: string) => ['ai-job', id] as const,
   backup: () => ['backup'] as const,
+  components: (query?: Record<string, unknown>) =>
+    ['components', query ?? {}] as const,
+  component: (id: string) => ['components', 'one', id] as const,
+  itemComponents: (itemId: string) => ['item-components', itemId] as const,
+  spares: (query?: Record<string, unknown>) => ['spares', query ?? {}] as const,
 }

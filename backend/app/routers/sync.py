@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from app.models.component import Component, ComponentSpare, ItemComponent
 from app.models.custom_field import CustomField
 from app.models.item import Item, ItemPhoto
 from app.models.location import Location
@@ -14,6 +15,7 @@ from app.models.maintenance import MaintenanceLog
 from app.models.receipt import Receipt
 from app.models.tag import Tag
 from app.schemas.common import Envelope, ok
+from app.schemas.component import ComponentRead, ItemComponentRow, SpareRow
 from app.schemas.custom_field import CustomFieldRead
 from app.schemas.item import ItemPhotoRead, ItemRead
 from app.schemas.location import LocationRead
@@ -70,6 +72,14 @@ REGISTRY = SyncRegistry(
             user_column=None,
             parent=ParentScope(foreign_key="item_id", model=Item),
         ),
+        SyncResource(name=SyncEntity.COMPONENT.value, model=Component),
+        SyncResource(
+            name=SyncEntity.ITEM_COMPONENT.value,
+            model=ItemComponent,
+            user_column=None,
+            parent=ParentScope(foreign_key="item_id", model=Item),
+        ),
+        SyncResource(name=SyncEntity.SPARE.value, model=ComponentSpare),
     ]
 )
 
@@ -86,6 +96,9 @@ READERS: dict[str, Any] = {
     SyncEntity.RECEIPT.value: ReceiptRead,
     SyncEntity.MAINTENANCE.value: MaintenanceRead,
     SyncEntity.CUSTOM_FIELD.value: CustomFieldRead,
+    SyncEntity.COMPONENT.value: ComponentRead,
+    SyncEntity.ITEM_COMPONENT.value: ItemComponentRow,
+    SyncEntity.SPARE.value: SpareRow,
 }
 
 #: Which field of `SyncChanges` holds which table.
@@ -97,6 +110,9 @@ FIELDS: dict[str, str] = {
     SyncEntity.RECEIPT.value: "receipts",
     SyncEntity.MAINTENANCE.value: "maintenance_logs",
     SyncEntity.CUSTOM_FIELD.value: "custom_fields",
+    SyncEntity.COMPONENT.value: "components",
+    SyncEntity.ITEM_COMPONENT.value: "item_components",
+    SyncEntity.SPARE.value: "spares",
 }
 
 
