@@ -1,1 +1,61 @@
-{}
+{
+  "expo": {
+    "name": "HomeStock",
+    "slug": "homestock",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "homestock",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.homestock.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "HomeStock uses the camera to photograph items, receipts, and barcodes.",
+        "NSPhotoLibraryUsageDescription": "HomeStock attaches photographs from your library to an item.",
+        "NFCReaderUsageDescription": "HomeStock reads an NFC tag to open the item or the location that the tag names."
+      }
+    },
+    "android": {
+      "package": "com.homestock.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      },
+      "permissions": ["CAMERA", "NFC", "VIBRATE"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "HomeStock uses the camera to photograph items, receipts, and barcodes."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2563eb"
+        }
+      ],
+      "react-native-nfc-manager"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "00000000-0000-0000-0000-000000000000"
+      }
+    }
+  }
+}
