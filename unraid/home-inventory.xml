@@ -83,6 +83,10 @@
     Description="Structures the receipt text that Tesseract reads."
     Type="Variable" Display="advanced" Required="false">llama3.2:3b</Config>
 
+  <Config Name="Ollama Context Tokens" Target="HS_OLLAMA_NUM_CTX" Default="8192"
+    Mode="" Description="How many tokens the model may hold. One photograph costs about 1900. Below 4096 a recognition fails." Type="Variable"
+    Display="advanced" Required="false" Mask="false">8192</Config>
+
   <Config Name="AI Inline Timeout" Target="HS_AI_INLINE_TIMEOUT" Default="8"
     Description="Seconds to hold an AI request open before it becomes a background job."
     Type="Variable" Display="advanced" Required="false">8</Config>

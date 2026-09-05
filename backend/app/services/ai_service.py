@@ -69,6 +69,8 @@ DEFAULT_BASE_URL: Final[str] = "http://ollama:11434"
 DEFAULT_MODEL: Final[str] = "moondream"
 DEFAULT_TEXT_MODEL: Final[str] = "llama3.2:3b"
 DEFAULT_TIMEOUT: Final[float] = 300.0
+#: The context that a model loads with. See OllamaConfig.num_ctx.
+DEFAULT_NUM_CTX: Final[int] = 8192
 #: The status check must stay fast, because the health route calls it.
 STATUS_TIMEOUT: Final[float] = 5.0
 
@@ -76,6 +78,17 @@ STATUS_TIMEOUT: Final[float] = 5.0
 # --------------------------------------------------------------------------
 # Data
 # --------------------------------------------------------------------------
+
+
+def _reason(body: str) -> str:
+    """Return the sentence that Ollama put in the body of an error."""
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return body.strip() or "no reason given"
+    if isinstance(parsed, dict) and parsed.get("error"):
+        return str(parsed["error"])
+    return body.strip() or "no reason given"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +101,11 @@ class OllamaConfig:
     #: times faster than vision inference.
     text_model: str = DEFAULT_TEXT_MODEL
     timeout: float = DEFAULT_TIMEOUT
+    #: How many tokens the model may hold. One photograph costs about 1900
+    #: of them, and a model loads with 2048 unless it is told otherwise, so
+    #: the default alone refuses every picture with "exceeds the available
+    #: context size". Three photographs of one item need about 6000.
+    num_ctx: int = DEFAULT_NUM_CTX
     enabled: bool = True
 
     @classmethod
@@ -102,6 +120,7 @@ class OllamaConfig:
             timeout=float(
                 setting("ollama_timeout", DEFAULT_TIMEOUT) or DEFAULT_TIMEOUT
             ),
+            num_ctx=int(setting("ollama_num_ctx", DEFAULT_NUM_CTX) or DEFAULT_NUM_CTX),
             enabled=bool(setting("ai_enabled", True)),
         )
 
@@ -352,7 +371,7 @@ class AIService:
             "model": wanted_model,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": {"temperature": temperature, "num_ctx": config.num_ctx},
         }
         if json_format:
             body["format"] = "json"
@@ -377,8 +396,11 @@ class AIService:
                     f"Ollama does not have the model '{wanted_model}'. "
                     f"Run: ollama pull {wanted_model}"
                 ) from exc
+            # Ollama says why in the body. Put it in the message, because the
+            # job record and the log line show the message and nothing else.
             raise UpstreamError(
-                f"Ollama answered with status {exc.response.status_code}.",
+                f"Ollama answered with status {exc.response.status_code} "
+                f"for the model '{wanted_model}': {_reason(detail)}",
                 details={"body": detail},
             ) from exc
         except httpx.HTTPError as exc:

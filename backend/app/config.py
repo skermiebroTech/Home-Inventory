@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     )
     # CPU inference is slow. This ceiling stops a stuck request from hanging.
     ollama_timeout: int = Field(default=300, validation_alias=_alias("ollama_timeout"))
+    #: How many tokens the model may hold. One photograph costs about 1900,
+    #: and a model loads with 2048 unless it is told otherwise.
+    ollama_num_ctx: int = Field(
+        default=8192, ge=2048, le=131072, validation_alias=_alias("ollama_num_ctx")
+    )
     # Seconds to hold an AI request open before it becomes a background job.
     # A request that outlives the reverse proxy timeout fails for the client.
     ai_inline_timeout: int = Field(
