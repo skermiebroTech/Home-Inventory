@@ -21,6 +21,8 @@ function fromSuggestion(entry: RecognizedItem): Partial<ItemFormValues> {
   return {
     name: entry.name,
     brand: entry.brand,
+    model: entry.model,
+    serial_number: entry.serial_number,
     category: entry.category,
     subcategory: entry.subcategory,
     condition: entry.condition,
@@ -33,7 +35,9 @@ export default function AddItem() {
   const create = useCreateItem()
   const bulkCreate = useBulkCreateItems()
   const [values, setValues] = useState<ItemFormValues>(emptyItem())
-  const [photo, setPhoto] = useState<File | null>(null)
+  // Every photograph that the scan used is attached to the item on save.
+  const [photos, setPhotos] = useState<File[]>([])
+  const [readText, setReadText] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<RecognizedItem[] | null>(null)
   const [chosen, setChosen] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
@@ -42,8 +46,8 @@ export default function AddItem() {
     setSaving(true)
     try {
       const item = await create.mutateAsync({ ...values })
-      // The photograph that the model read becomes the item photograph.
-      if (photo) await itemsApi.uploadPhotos(item.id, [photo])
+      // The photographs that the model read become the item photographs.
+      if (photos.length > 0) await itemsApi.uploadPhotos(item.id, photos)
       toastOk('The item is saved.')
       navigate(`/items/${item.id}`)
     } catch (error) {
@@ -53,14 +57,19 @@ export default function AddItem() {
     }
   }
 
-  const takeSuggestions = (entries: RecognizedItem[], file: File) => {
+  const takeSuggestions = (
+    entries: RecognizedItem[],
+    files: File[],
+    text: string | null,
+  ) => {
+    setPhotos(files)
+    setReadText(text)
     if (entries.length === 0) {
-      toastError(new Error('The model found no item in that photograph.'))
+      toastError(new Error('The model found no item in those photographs.'))
       return
     }
     if (entries.length === 1 && entries[0]) {
       setValues({ ...values, ...fromSuggestion(entries[0]) } as ItemFormValues)
-      setPhoto(file)
       toastOk('The form is filled. Check it before you save.')
       return
     }
@@ -104,8 +113,12 @@ export default function AddItem() {
           saving={saving || create.isPending}
           submitLabel="Save the item"
           extra={
-            <div className="mb-4 flex flex-wrap gap-2 rounded-lg border border-dashed border-ink-300 p-3 dark:border-ink-700">
-              <AiPhotoButton onResult={takeSuggestions} label="Photograph one item" />
+            <div className="mb-4 space-y-2 rounded-lg border border-dashed border-ink-300 p-3 dark:border-ink-700">
+              <div className="flex flex-wrap gap-2">
+              <AiPhotoButton
+                onResult={takeSuggestions}
+                label="Photograph one item"
+              />
               <AiPhotoButton
                 mode="bulk"
                 onResult={takeSuggestions}
@@ -123,6 +136,31 @@ export default function AddItem() {
                   })
                 }
               />
+              </div>
+
+              <p className="text-xs text-ink-500">
+                Choose several photographs at once. A picture of the rating
+                plate or the box gives the model number and the serial number.
+              </p>
+
+              {photos.length > 0 ? (
+                <p className="text-xs text-accent-600 dark:text-accent-400">
+                  {photos.length}{' '}
+                  {photos.length === 1 ? 'photograph is' : 'photographs are'}{' '}
+                  attached to this item.
+                </p>
+              ) : null}
+
+              {readText ? (
+                <details className="text-xs text-ink-500">
+                  <summary className="cursor-pointer">
+                    The text that the server read
+                  </summary>
+                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap">
+                    {readText}
+                  </pre>
+                </details>
+              ) : null}
             </div>
           }
         />

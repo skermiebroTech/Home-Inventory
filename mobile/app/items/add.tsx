@@ -25,12 +25,16 @@ export default function AddItem() {
   const params = useLocalSearchParams<{
     name?: string
     brand?: string
+    model?: string
+    serial?: string
     category?: string
     condition?: string
     value?: string
     barcode?: string
-    photo?: string
+    /** The scan joins the photograph paths with a vertical bar. */
+    photos?: string
   }>()
+  const photos = (params.photos ?? '').split('|').filter(Boolean)
   const sync = useSyncStore()
 
   const [name, setName] = useState(params.name ?? '')
@@ -54,6 +58,8 @@ export default function AddItem() {
       const item = await createItem({
         name: name.trim(),
         brand: brand.trim() || null,
+        model: params.model || null,
+        serial_number: params.serial || null,
         category: category.trim() || null,
         current_value: value.trim() || null,
         condition: params.condition || null,
@@ -62,7 +68,7 @@ export default function AddItem() {
         notes: notes.trim() || null,
         location_id: locationId,
       })
-      if (params.photo) await attachPhoto(item.id, params.photo)
+      for (const uri of photos) await attachPhoto(item.id, uri)
 
       await sync.refreshCounts()
       void sync.run()
@@ -79,12 +85,25 @@ export default function AddItem() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
-          {params.photo ? (
+          {photos.length > 0 ? (
             <Card>
-              <Body weight="600">The photograph is attached</Body>
+              <Body weight="600">
+                {photos.length === 1
+                  ? 'The photograph is attached'
+                  : `${photos.length} photographs are attached`}
+              </Body>
               <Caption>
-                It goes up on the next sync. The default setting waits for WiFi.
+                They go up on the next sync. The default setting waits for WiFi.
               </Caption>
+            </Card>
+          ) : null}
+
+          {params.serial || params.model ? (
+            <Card>
+              <Body weight="600">Read from the label</Body>
+              {params.model ? <Caption>Model: {params.model}</Caption> : null}
+              {params.serial ? <Caption>Serial: {params.serial}</Caption> : null}
+              <Caption>Check these before you save.</Caption>
             </Card>
           ) : null}
 

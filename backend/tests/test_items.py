@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 from typing import Any
 
@@ -477,3 +478,80 @@ async def test_delete_photo_removes_the_files_and_promotes_the_next(
     assert len(remaining) == 1
     assert remaining[0]["id"] == photos[1]["id"]
     assert remaining[0]["is_primary"] is True
+
+
+async def test_photo_upload_reads_the_text_on_the_photograph(
+    client: AsyncClient, headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The upload answers at once, and the OCR fills the row after it."""
+    import app.routers.items as items_router
+
+    class FakeOCR:
+        async def extract_text(self, _image: bytes) -> str:
+            return "DEWALT DCD771\nTYPE 1  18V\nS/N 4821994"
+
+    monkeypatch.setattr(items_router, "OCRService", FakeOCR)
+
+    item = await make_item(client, headers, name="Drill with a rating plate")
+    response = await client.post(
+        f"/api/items/{item['id']}/photos",
+        files=[("files", ("plate.png", png_bytes((500, 400)), "image/png"))],
+        headers=headers,
+    )
+    assert response.status_code == 201
+    # The reply does not wait for the text.
+    assert response.json()["data"][0]["ocr_text"] is None
+
+    photo_id = response.json()["data"][0]["id"]
+    for _ in range(40):
+        detail = await client.get(f"/api/items/{item['id']}", headers=headers)
+        photo = next(p for p in detail.json()["data"]["photos"] if p["id"] == photo_id)
+        if photo["ocr_text"]:
+            break
+        await asyncio.sleep(0.05)
+
+    assert "DCD771" in photo["ocr_text"]
+    assert "4821994" in photo["ocr_text"]
+
+
+async def test_a_photograph_with_no_text_stores_nothing(
+    client: AsyncClient, headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.routers.items as items_router
+
+    class SilentOCR:
+        async def extract_text(self, _image: bytes) -> str:
+            return "   "
+
+    monkeypatch.setattr(items_router, "OCRService", SilentOCR)
+
+    item = await make_item(client, headers, name="Plain box")
+    response = await client.post(
+        f"/api/items/{item['id']}/photos",
+        files=[("files", ("box.png", png_bytes((300, 300)), "image/png"))],
+        headers=headers,
+    )
+    assert response.status_code == 201
+
+    await asyncio.sleep(0.4)
+    detail = await client.get(f"/api/items/{item['id']}", headers=headers)
+    assert detail.json()["data"]["photos"][0]["ocr_text"] is None
+
+
+async def test_many_photographs_upload_together(
+    client: AsyncClient, headers: dict[str, str]
+) -> None:
+    item = await make_item(client, headers, name="Machine from four sides")
+    response = await client.post(
+        f"/api/items/{item['id']}/photos",
+        files=[
+            ("files", (f"side-{index}.png", png_bytes((400, 300)), "image/png"))
+            for index in range(4)
+        ],
+        headers=headers,
+    )
+    assert response.status_code == 201
+    photos = response.json()["data"]
+    assert len(photos) == 4
+    # Only the first one is the primary photograph.
+    assert [p["is_primary"] for p in photos] == [True, False, False, False]

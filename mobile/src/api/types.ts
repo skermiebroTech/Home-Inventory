@@ -43,6 +43,8 @@ export interface ItemPhoto {
   thumbnail_path: string | null
   is_primary: boolean
   ai_description: string | null
+  /** What OCR read on the photograph. Filled shortly after the upload. */
+  ocr_text: string | null
   created_at: string
 }
 
@@ -161,6 +163,8 @@ export interface BarcodeProduct {
 export interface RecognizedItem {
   name: string
   brand: string | null
+  model: string | null
+  serial_number: string | null
   category: string | null
   subcategory: string | null
   estimated_value_aud: string | null
@@ -177,7 +181,13 @@ export interface AiJob {
   started_at: string | null
   finished_at: string | null
   error: string | null
-  recognize_result: { items: RecognizedItem[]; model: string; duration_ms: number } | null
+  recognize_result: {
+    items: RecognizedItem[]
+    model: string
+    duration_ms: number
+    image_count: number
+    ocr_text: string | null
+  } | null
   receipt_result: ParsedReceipt | null
 }
 

@@ -69,6 +69,8 @@ export interface ItemPhoto {
   thumbnail_path: string | null
   is_primary: boolean
   ai_description: string | null
+  /** What OCR read on the photograph. Filled shortly after the upload. */
+  ocr_text: string | null
   created_at: string
 }
 
@@ -270,6 +272,8 @@ export type AiJobKind = 'recognize' | 'bulk_scan' | 'receipt_parse'
 export interface RecognizedItem {
   name: string
   brand: string | null
+  model: string | null
+  serial_number: string | null
   category: string | null
   subcategory: string | null
   estimated_value_aud: string | null
@@ -282,6 +286,8 @@ export interface RecognizeResult {
   items: RecognizedItem[]
   model: string
   duration_ms: number
+  image_count: number
+  ocr_text: string | null
 }
 
 export interface ParsedReceiptLine {

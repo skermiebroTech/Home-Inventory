@@ -5,7 +5,7 @@
  * before the server has resized it.
  */
 
-import { Camera, ImagePlus, Star, Trash2 } from 'lucide-react'
+import { Camera, ImagePlus, ScanText, Star, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { mediaUrl } from '@/api/client'
@@ -27,6 +27,7 @@ export default function PhotoUploader({
   const cameraInput = useRef<HTMLInputElement>(null)
   const [previews, setPreviews] = useState<string[]>([])
   const [doomed, setDoomed] = useState<string | null>(null)
+  const withText = photos.filter((photo) => photo.ocr_text)
 
   const send = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -57,6 +58,14 @@ export default function PhotoUploader({
             {photo.is_primary ? (
               <span className="absolute left-1.5 top-1.5 rounded bg-ink-950/70 p-1 text-white">
                 <Star className="h-3 w-3 fill-current" />
+              </span>
+            ) : null}
+            {photo.ocr_text ? (
+              <span
+                title="The server read text on this photograph"
+                className="absolute bottom-1.5 left-1.5 rounded bg-ink-950/70 p-1 text-white"
+              >
+                <ScanText className="h-3 w-3" />
               </span>
             ) : null}
             <button
@@ -106,6 +115,10 @@ export default function PhotoUploader({
         >
           Add photographs
         </Button>
+        <p className="w-full text-xs text-ink-500">
+          Photograph the item from several sides. The server reads any text it
+          finds, so a rating plate gives the model and the serial number.
+        </p>
         <Button
           type="button"
           variant="secondary"
@@ -116,6 +129,31 @@ export default function PhotoUploader({
           Camera
         </Button>
       </div>
+
+      {withText.length > 0 ? (
+        <details className="mt-3 rounded-lg border border-ink-200 p-3 text-sm dark:border-ink-800">
+          <summary className="cursor-pointer font-medium">
+            Text on {withText.length}{' '}
+            {withText.length === 1 ? 'photograph' : 'photographs'}
+          </summary>
+          <p className="mt-1 text-xs text-ink-500">
+            The server read this with OCR. Copy a model number or a serial
+            number straight into the item.
+          </p>
+          <div className="mt-2 space-y-2">
+            {withText.map((photo, index) => (
+              <div key={photo.id}>
+                <p className="text-xs font-medium text-ink-500">
+                  Photograph {index + 1}
+                </p>
+                <pre className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-ink-100 p-2 text-xs dark:bg-ink-950">
+                  {photo.ocr_text}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <ConfirmDialog
         open={doomed !== null}

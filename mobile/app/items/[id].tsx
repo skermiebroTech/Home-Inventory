@@ -54,11 +54,31 @@ export default function ItemScreen() {
   if (!item) return <Loading label="Reading the item" />
 
   const addPhoto = async (): Promise<void> => {
+    // Several pictures at once: the item, its label, and its box.
     const result = await ImagePicker.launchCameraAsync({ quality: 0.7 })
     if (result.canceled || !result.assets[0]) return
     await attachPhoto(item.id, result.assets[0].uri)
+    await load()
     await sync.refreshCounts()
-    Alert.alert('The photograph is queued', 'It goes up on the next sync over WiFi.')
+    Alert.alert(
+      'The photograph is queued',
+      'It goes up on the next sync over WiFi. The server reads any text on it.',
+    )
+  }
+
+  const addFromLibrary = async (): Promise<void> => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      quality: 0.7,
+      allowsMultipleSelection: true,
+    })
+    if (result.canceled) return
+    for (const asset of result.assets) await attachPhoto(item.id, asset.uri)
+    await load()
+    await sync.refreshCounts()
+    Alert.alert(
+      'Queued',
+      `${result.assets.length} photographs go up on the next sync.`,
+    )
   }
 
   return (
@@ -87,7 +107,20 @@ export default function ItemScreen() {
         ) : null}
 
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <Button title="Photograph" icon="camera" variant="secondary" onPress={() => void addPhoto()} style={{ flex: 1 }} />
+          <Button
+            title="Photograph"
+            icon="camera"
+            variant="secondary"
+            onPress={() => void addPhoto()}
+            style={{ flex: 1 }}
+          />
+          <Button
+            title="Library"
+            icon="images"
+            variant="secondary"
+            onPress={() => void addFromLibrary()}
+            style={{ flex: 1 }}
+          />
           {item.is_lent ? (
             <Button
               title="Returned"
@@ -126,6 +159,26 @@ export default function ItemScreen() {
                 await sync.refreshCounts()
               }}
             />
+          </Card>
+        ) : null}
+
+        {photos.some((photo) => photo.ocr_text) ? (
+          <Card>
+            <Body weight="600">Text on the photographs</Body>
+            <Caption>
+              The server read this with OCR. It often holds the model and the
+              serial number.
+            </Caption>
+            <View style={{ marginTop: spacing.sm, gap: spacing.sm }}>
+              {photos
+                .filter((photo) => photo.ocr_text)
+                .map((photo, index) => (
+                  <View key={photo.id}>
+                    <Caption>Photograph {index + 1}</Caption>
+                    <Body>{photo.ocr_text}</Body>
+                  </View>
+                ))}
+            </View>
           </Card>
         ) : null}
 

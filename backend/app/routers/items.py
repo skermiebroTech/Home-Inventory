@@ -17,6 +17,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.database import SessionLocal
 from app.models.item import Item, ItemPhoto
 from app.models.tag import Tag
 from app.models.user import User
@@ -31,6 +32,8 @@ from app.schemas.item import (
     ItemUpdate,
 )
 from app.services.barcode_service import InvalidBarcodeError, get_barcode_service
+from app.services.job_service import get_job_store
+from app.services.ocr_service import OCRService
 from app.utils.auth import CurrentUser, SessionDep
 from app.utils.errors import ApiError, not_found
 from app.utils.queries import (
@@ -429,6 +432,7 @@ async def upload_item_photos(
     has_primary = any(photo.is_primary for photo in item.photos)
 
     created: list[ItemPhoto] = []
+    uploaded: list[bytes] = []
     for upload in files:
         data = await read_upload(upload)
         try:
@@ -452,13 +456,50 @@ async def upload_item_photos(
         has_primary = True
         session.add(photo)
         created.append(photo)
+        uploaded.append(data)
 
     # A new photograph changes what the mobile application shows for the item.
     item.version += 1
     await session.commit()
     for photo in created:
         await session.refresh(photo)
+
+    # A label, a rating plate, or a box carries the model and the serial
+    # number. Tesseract runs on the CPU, so it runs after the reply. The ids
+    # are read here, not inside the task, because the task starts at the next
+    # await and an ORM read during a refresh is a second use of one session.
+    pending = [(photo.id, data) for photo, data in zip(created, uploaded, strict=True)]
+    if pending:
+        get_job_store().submit(
+            kind="receipt_parse",
+            user_id=user.id,
+            work=lambda: _read_photo_text(pending),
+        )
+
     return ok([ItemPhotoRead.model_validate(photo) for photo in created])
+
+
+async def _read_photo_text(photos: list[tuple[uuid.UUID, bytes]]) -> int:
+    """Read the text of each new photograph and write it onto the row.
+
+    This runs after the upload reply, in its own session, because the request
+    session closes with the request.
+    """
+    service = OCRService()
+    found = 0
+    async with SessionLocal() as session:
+        for photo_id, data in photos:
+            text = (await service.extract_text(data)).strip()
+            if not text:
+                continue
+            photo = await session.get(ItemPhoto, photo_id)
+            if photo is None:
+                continue
+            photo.ocr_text = text
+            found += 1
+        if found:
+            await session.commit()
+    return found
 
 
 @router.delete(

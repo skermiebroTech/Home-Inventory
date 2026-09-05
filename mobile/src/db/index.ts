@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS item_photos (
   file_path TEXT NOT NULL,
   thumbnail_path TEXT,
   is_primary INTEGER NOT NULL DEFAULT 0,
+  ocr_text TEXT,
   created_at TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_photos_item ON item_photos(item_id);
@@ -142,7 +143,27 @@ export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (database) return database
   database = await SQLite.openDatabaseAsync(DATABASE_NAME)
   await database.execAsync(SCHEMA)
+  await addMissingColumns(database)
   return database
+}
+
+/**
+ * Bring an older local database forward.
+ *
+ * `CREATE TABLE IF NOT EXISTS` leaves an existing table as it was, so a new
+ * column needs this. A phone that already holds data then keeps it.
+ */
+async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  const wanted: Array<[string, string, string]> = [
+    ['item_photos', 'ocr_text', 'TEXT'],
+  ]
+  for (const [table, column, type] of wanted) {
+    const columns = await db.getAllAsync<{ name: string }>(
+      `PRAGMA table_info(${table})`,
+    )
+    if (columns.some((entry) => entry.name === column)) continue
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  }
 }
 
 export async function resetDatabase(): Promise<void> {
@@ -325,10 +346,10 @@ export async function upsertPhotos(rows: ItemPhoto[]): Promise<void> {
   for (const row of rows) {
     await db.runAsync(
       `INSERT OR REPLACE INTO item_photos
-       (id, item_id, file_path, thumbnail_path, is_primary, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (id, item_id, file_path, thumbnail_path, is_primary, ocr_text, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       row.id, row.item_id, row.file_path, row.thumbnail_path,
-      row.is_primary ? 1 : 0, row.created_at,
+      row.is_primary ? 1 : 0, row.ocr_text ?? null, row.created_at,
     )
   }
 }

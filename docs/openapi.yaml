@@ -1429,6 +1429,17 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
+      - name: read_text
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Run OCR on the photographs first and give the text to the model, so a rating plate
+            fills the model and the serial number.
+          default: true
+          title: Read Text
+        description: Run OCR on the photographs first and give the text to the model, so a rating plate
+          fills the model and the serial number.
       - name: wait
         in: query
         required: false
@@ -1472,6 +1483,13 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
+      - name: read_text
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Read Text
       - name: wait
         in: query
         required: false
@@ -2151,14 +2169,16 @@ components:
       description: A product found in a public barcode database.
     Body_bulk_scan_api_ai_bulk_scan_post:
       properties:
-        file:
-          type: string
-          format: binary
-          title: File
-          description: One image of many items.
+        files:
+          items:
+            type: string
+            format: binary
+          type: array
+          title: Files
+          description: One or more photographs of a shelf or a drawer.
       type: object
       required:
-      - file
+      - files
       title: Body_bulk_scan_api_ai_bulk_scan_post
     Body_receipt_parse_api_ai_receipt_parse_post:
       properties:
@@ -2173,14 +2193,16 @@ components:
       title: Body_receipt_parse_api_ai_receipt_parse_post
     Body_recognize_api_ai_recognize_post:
       properties:
-        file:
-          type: string
-          format: binary
-          title: File
-          description: One image of one item.
+        files:
+          items:
+            type: string
+            format: binary
+          type: array
+          title: Files
+          description: One or more photographs of the same item.
       type: object
       required:
-      - file
+      - files
       title: Body_recognize_api_ai_recognize_post
     Body_restore_backup_api_backup_restore_post:
       properties:
@@ -3079,6 +3101,12 @@ components:
           - type: string
           - type: 'null'
           title: Ai Description
+        ocr_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ocr Text
+          description: The text that OCR read from the photograph, if any.
         created_at:
           type: string
           format: date-time
@@ -4293,6 +4321,17 @@ components:
         duration_ms:
           type: integer
           title: Duration Ms
+        image_count:
+          type: integer
+          title: Image Count
+          description: How many photographs the model read.
+          default: 1
+        ocr_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ocr Text
+          description: The text that OCR read from the photographs, if any.
       type: object
       required:
       - model
@@ -4309,6 +4348,18 @@ components:
           - type: string
           - type: 'null'
           title: Brand
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+          description: Read from a label or a rating plate.
+        serial_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Serial Number
+          description: Only when the text of a photograph shows it.
         category:
           anyOf:
           - type: string

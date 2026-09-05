@@ -16,8 +16,10 @@ server.
 
 ## What it does
 
-- **AI recognition.** Photograph an item. A model on your own server names it,
-  guesses the brand, the category, and the value.
+- **AI recognition.** Photograph an item, from as many sides as you like. The
+  server reads any text it finds first, so a picture of the rating plate gives
+  the exact model and the serial number. A model on your own server then names
+  the item and guesses the category and the value.
 - **Receipt reading.** Photograph a receipt. Tesseract reads the text, a model
   turns it into fields, and you link the lines to items.
 - **Barcodes.** Scan a product code. HomeStock asks Open Food Facts and
@@ -104,6 +106,7 @@ falls back to the bare name, because the Unraid template uses bare names.
 | `HS_IMAGE_MAX_DIMENSION` | `2000` | The longest side of a stored original. |
 | `HS_THUMBNAIL_SIZES` | `200,600` | The thumbnail widths, in pixels. |
 | `HS_STRIP_EXIF_GPS` | `true` | Removes the position from every upload. |
+| `HS_TESSERACT_CMD` | `/usr/bin/tesseract` | Reads the text on a photograph. |
 | `HS_BACKUP_ENABLED` | `false` | Turns the scheduled backup on. |
 | `HS_BACKUP_CRON` | `0 3 * * *` | When it runs. |
 | `HS_BACKUP_RETENTION` | `7` | How many archives to keep. |

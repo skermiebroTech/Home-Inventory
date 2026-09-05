@@ -476,7 +476,7 @@ async def test_an_ai_route_answers_503_when_the_feature_is_off(
 ) -> None:
     response = await client.post(
         "/api/ai/recognize",
-        files={"file": ("item.png", image_bytes(), "image/png")},
+        files=[("files", ("item.png", image_bytes(), "image/png"))],
         headers=headers,
     )
     assert response.status_code == 503

@@ -27,6 +27,10 @@ from app.utils.settings import setting
 logger = logging.getLogger(__name__)
 
 DEFAULT_CURRENCY: Final[str] = "AUD"
+
+#: Below this, the OCR output is noise from the shape of the object, not
+#: readable text, and it only confuses the model.
+MIN_USEFUL_TEXT_CHARS: Final[int] = 4
 MAX_RAW_TEXT_CHARS: Final[int] = 20000
 
 _MONTHS: Final[dict[str, int]] = {
@@ -110,6 +114,20 @@ class OCRService:
     async def extract_text(self, image: bytes) -> str:
         """Return the raw text of an image. An empty string means no OCR."""
         return await anyio.to_thread.run_sync(lambda: self._tesseract(image))
+
+    async def extract_text_many(self, images: list[bytes]) -> str:
+        """Return the text of several photographs, one labelled block each.
+
+        A photograph of a rating plate or a box carries the model and the
+        serial number. The block keeps the photographs apart, so the model
+        can tell which text came from where.
+        """
+        blocks: list[str] = []
+        for index, image in enumerate(images, start=1):
+            text = (await self.extract_text(image)).strip()
+            if len(text) >= MIN_USEFUL_TEXT_CHARS:
+                blocks.append(f"Photograph {index}:\n{text}")
+        return "\n\n".join(blocks)
 
     async def tesseract_available(self) -> bool:
         """Return True if the Tesseract binary answers."""
@@ -423,6 +441,7 @@ def get_ocr_service() -> OCRService:
 
 __all__ = [
     "DEFAULT_CURRENCY",
+    "MIN_USEFUL_TEXT_CHARS",
     "OCRService",
     "ParsedReceipt",
     "ReceiptLine",

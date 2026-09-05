@@ -23,6 +23,10 @@ class ItemPhotoRead(ORMModel):
     thumbnail_path: str | None
     is_primary: bool
     ai_description: str | None
+    ocr_text: str | None = Field(
+        default=None,
+        description="The text that OCR read from the photograph, if any.",
+    )
     created_at: datetime
 
 

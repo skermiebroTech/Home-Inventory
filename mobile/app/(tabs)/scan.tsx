@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { useRouter } from 'expo-router'
 import { useRef, useState } from 'react'
-import { Alert, Pressable, ScrollView, View } from 'react-native'
+import { Alert, Image, Pressable, ScrollView, View } from 'react-native'
 
 import { api } from '@/api/client'
 import type { AiJob, BarcodeProduct, ReceiptDetail } from '@/api/types'
@@ -21,10 +21,11 @@ import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
 import { isOnline } from '@/sync/engine'
 import { radius, spacing, useTheme } from '@/theme'
 
-type Mode = 'photo' | 'barcode' | 'receipt'
+type Mode = 'photo' | 'bulk' | 'barcode' | 'receipt'
 
 const MODES: Array<{ key: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'photo', label: 'Item', icon: 'camera' },
+  { key: 'bulk', label: 'Shelf', icon: 'grid' },
   { key: 'barcode', label: 'Barcode', icon: 'barcode' },
   { key: 'receipt', label: 'Receipt', icon: 'receipt' },
 ]
@@ -48,6 +49,9 @@ export default function Scan() {
   const [mode, setMode] = useState<Mode>('photo')
   const [busy, setBusy] = useState<string | null>(null)
   const [locked, setLocked] = useState(false)
+  // One item often needs several photographs: the item, its label, and its
+  // box. They all go to the model together.
+  const [shots, setShots] = useState<string[]>([])
 
   if (!permission) return <Screen><View /></Screen>
 
@@ -79,27 +83,61 @@ export default function Scan() {
     return false
   }
 
-  const takePhoto = async (): Promise<void> => {
-    if (!(await guardOnline())) return
+  /** Take one picture. In photo mode it joins the tray. */
+  const shoot = async (): Promise<void> => {
     const shot = await camera.current?.takePictureAsync({ quality: 0.7 })
     if (!shot) return
+    if (mode === 'receipt') {
+      await sendReceipt(shot.uri)
+      return
+    }
+    setShots((current) => [...current, shot.uri])
+  }
 
-    setBusy(mode === 'receipt' ? 'Reading the receipt' : 'The model is looking')
+  const sendReceipt = async (uri: string): Promise<void> => {
+    if (!(await guardOnline())) return
+    setBusy('Reading the receipt')
     try {
       const form = new FormData()
       form.append('file', {
-        uri: shot.uri,
-        name: 'scan.jpg',
+        uri,
+        name: 'receipt.jpg',
         type: 'image/jpeg',
       } as unknown as Blob)
+      const receipt = await api.upload<ReceiptDetail>('/api/receipts/upload', form)
+      router.push(`/receipts/${receipt.id}`)
+    } catch (error) {
+      Alert.alert(
+        'That did not work',
+        error instanceof Error ? error.message : 'Unknown failure.',
+      )
+    } finally {
+      setBusy(null)
+    }
+  }
 
-      if (mode === 'receipt') {
-        const receipt = await api.upload<ReceiptDetail>('/api/receipts/upload', form)
-        router.push(`/receipts/${receipt.id}`)
-        return
-      }
+  /** Send every picture in the tray to the model. */
+  const identify = async (): Promise<void> => {
+    if (shots.length === 0) return
+    if (!(await guardOnline())) return
 
-      const started = await api.upload<AiJob>('/api/ai/recognize', form)
+    setBusy(
+      shots.length === 1
+        ? 'The model is looking'
+        : `Reading ${shots.length} photographs`,
+    )
+    try {
+      const form = new FormData()
+      shots.forEach((uri, index) => {
+        form.append('files', {
+          uri,
+          name: `scan-${index + 1}.jpg`,
+          type: 'image/jpeg',
+        } as unknown as Blob)
+      })
+
+      const path = mode === 'bulk' ? '/api/ai/bulk-scan' : '/api/ai/recognize'
+      const started = await api.upload<AiJob>(path, form)
       const finished = await waitForJob(started)
       const first = finished.recognize_result?.items[0]
 
@@ -115,21 +153,27 @@ export default function Scan() {
         return
       }
 
-      // The form opens with the answer of the model, and with the photograph
-      // waiting in the queue.
+      // The form opens with the answer of the model. Every photograph waits
+      // in the queue and goes up with the item.
       router.push({
         pathname: '/items/add',
         params: {
           name: first.name,
           brand: first.brand ?? '',
+          model: first.model ?? '',
+          serial: first.serial_number ?? '',
           category: first.category ?? '',
           condition: first.condition ?? '',
           value: first.estimated_value_aud ?? '',
-          photo: shot.uri,
+          photos: shots.join('|'),
         },
       })
+      setShots([])
     } catch (error) {
-      Alert.alert('That did not work', error instanceof Error ? error.message : 'Unknown failure.')
+      Alert.alert(
+        'That did not work',
+        error instanceof Error ? error.message : 'Unknown failure.',
+      )
     } finally {
       setBusy(null)
     }
@@ -198,12 +242,15 @@ export default function Scan() {
             {MODES.map((entry) => (
               <Pressable
                 key={entry.key}
-                onPress={() => setMode(entry.key)}
+                onPress={() => {
+                  setMode(entry.key)
+                  setShots([])
+                }}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 6,
-                  paddingHorizontal: 14,
+                  paddingHorizontal: 12,
                   paddingVertical: 8,
                   borderRadius: 999,
                   backgroundColor: mode === entry.key ? theme.accent : 'transparent',
@@ -233,19 +280,96 @@ export default function Scan() {
         ) : null}
 
         {mode !== 'barcode' ? (
-          <View style={{ position: 'absolute', bottom: spacing.xl, left: 0, right: 0, alignItems: 'center' }}>
-            <Pressable
-              onPress={() => void takePhoto()}
-              disabled={busy !== null}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: spacing.lg,
+              left: 0,
+              right: 0,
+              gap: spacing.md,
+            }}
+          >
+            {shots.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: 8 }}
+              >
+                {shots.map((uri) => (
+                  <Pressable
+                    key={uri}
+                    onPress={() =>
+                      setShots((current) => current.filter((entry) => entry !== uri))
+                    }
+                  >
+                    <Image
+                      source={{ uri }}
+                      style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: radius.sm,
+                        borderWidth: 2,
+                        borderColor: '#ffffffcc',
+                      }}
+                    />
+                    <View
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        backgroundColor: '#000000cc',
+                        borderRadius: 999,
+                        padding: 2,
+                      }}
+                    >
+                      <Ionicons name="close" size={12} color="#ffffff" />
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            <View
               style={{
-                width: 72,
-                height: 72,
-                borderRadius: 999,
-                borderWidth: 4,
-                borderColor: '#ffffff',
-                backgroundColor: busy ? '#ffffff66' : '#ffffffdd',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.lg,
               }}
-            />
+            >
+              <View style={{ width: 104 }} />
+              <Pressable
+                onPress={() => void shoot()}
+                disabled={busy !== null}
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: 999,
+                  borderWidth: 4,
+                  borderColor: '#ffffff',
+                  backgroundColor: busy ? '#ffffff66' : '#ffffffdd',
+                }}
+              />
+              <View style={{ width: 104 }}>
+                {shots.length > 0 ? (
+                  <Button
+                    title={`Use ${shots.length}`}
+                    icon="checkmark"
+                    onPress={() => void identify()}
+                  />
+                ) : null}
+              </View>
+            </View>
+
+            {mode !== 'receipt' ? (
+              <View style={{ alignItems: 'center' }}>
+                <Caption tone="#ffffffcc">
+                  {shots.length === 0
+                    ? 'Take the item, its label, and its box.'
+                    : 'Tap a picture to drop it.'}
+                </Caption>
+              </View>
+            ) : null}
           </View>
         ) : (
           <View

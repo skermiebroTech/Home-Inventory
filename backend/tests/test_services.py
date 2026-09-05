@@ -7,6 +7,7 @@ that the suite runs with no Ollama server.
 from __future__ import annotations
 
 import io
+import json
 from datetime import date
 from pathlib import Path
 
@@ -394,3 +395,88 @@ def test_a_line_keeps_its_amount_when_the_model_fills_one_field() -> None:
     )
     assert [line.total for line in parsed.lines] == [19.0, 12.0, 4.25]
     assert parsed.lines[1].unit_price == 4.0
+
+
+# --------------------------------------------------------------------------
+# Reading the text on a photograph
+# --------------------------------------------------------------------------
+
+
+async def test_the_text_of_several_photographs_is_labelled() -> None:
+    from app.services.ocr_service import OCRService
+
+    service = OCRService()
+    pages = iter(["DEWALT DCD771\nTYPE 1", "  ", "S/N 4821994"])
+
+    async def fake_extract(_image: bytes) -> str:
+        return next(pages)
+
+    service.extract_text = fake_extract  # type: ignore[method-assign]
+
+    text = await service.extract_text_many([b"a", b"b", b"c"])
+    # The empty page drops out, and the numbering follows the photographs.
+    assert "Photograph 1:\nDEWALT DCD771" in text
+    assert "Photograph 3:\nS/N 4821994" in text
+    assert "Photograph 2" not in text
+
+
+async def test_recognize_sends_every_photograph_and_the_read_text() -> None:
+    from app.services.ai_service import AIService, OllamaConfig
+
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        seen["images"] = len(body["images"])
+        seen["prompt"] = body["prompt"]
+        return httpx.Response(
+            200,
+            json={
+                "response": '[{"name": "DeWalt DCD771 cordless drill", '
+                '"brand": "DeWalt", "model": "DCD771", '
+                '"serial_number": "4821994", "condition": "good"}]'
+            },
+        )
+
+    service = AIService(OllamaConfig(base_url="http://ollama.test"))
+    transport = httpx.MockTransport(handler)
+    service._client = lambda **_: httpx.AsyncClient(  # type: ignore[method-assign]
+        transport=transport, base_url="http://ollama.test"
+    )
+
+    result = await service.recognize(
+        [b"front", b"plate"], ocr_text="Photograph 2:\nDEWALT DCD771 S/N 4821994"
+    )
+
+    assert seen["images"] == 2
+    prompt = str(seen["prompt"])
+    # The prompt of the specification stays first, and the extra parts follow.
+    assert prompt.startswith("You are a home inventory assistant.")
+    assert "same one item" in prompt
+    assert "serial_number" in prompt
+    assert "S/N 4821994" in prompt
+
+    assert result.image_count == 2
+    suggestion = result.suggestions[0]
+    assert suggestion.model == "DCD771"
+    assert suggestion.serial_number == "4821994"
+    assert suggestion.to_item_payload()["serial_number"] == "4821994"
+
+
+async def test_one_photograph_does_not_get_the_multi_angle_line() -> None:
+    from app.services.ai_service import AIService, OllamaConfig
+
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["prompt"] = json.loads(request.read())["prompt"]
+        return httpx.Response(200, json={"response": "[]"})
+
+    service = AIService(OllamaConfig(base_url="http://ollama.test"))
+    transport = httpx.MockTransport(handler)
+    service._client = lambda **_: httpx.AsyncClient(  # type: ignore[method-assign]
+        transport=transport, base_url="http://ollama.test"
+    )
+
+    await service.recognize(b"only one")
+    assert "same one item" not in seen["prompt"]

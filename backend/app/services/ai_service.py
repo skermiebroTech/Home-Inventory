@@ -35,6 +35,18 @@ ITEM_RECOGNITION_PROMPT: Final[str] = (
     "— say 'DeWalt DCD771 cordless drill' not just 'drill'."
 )
 
+MULTI_ANGLE_SUFFIX: Final[str] = (
+    " Every photograph here shows the same one item, from a different side. "
+    "Return one object only, and use all of the photographs to fill it."
+)
+
+TEXT_DETAIL_SUFFIX: Final[str] = (
+    " A label, a rating plate, or a box often carries the exact model and the "
+    "serial number. Add a 'model' field and a 'serial_number' field to each "
+    "object. Read them from the text below. Leave a field null when the text "
+    "does not show it, and never invent a serial number."
+)
+
 BULK_SCAN_SUFFIX: Final[str] = (
     " This image shows a shelf, a drawer, or a work area that holds several "
     "items. List every item as its own object. Add a 'region' field to each "
@@ -135,6 +147,8 @@ class ItemSuggestion:
 
     name: str
     brand: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
     category: str | None = None
     subcategory: str | None = None
     estimated_value_aud: float | None = None
@@ -147,6 +161,8 @@ class ItemSuggestion:
         return {
             "name": self.name,
             "brand": self.brand,
+            "model": self.model,
+            "serial_number": self.serial_number,
             "category": self.category,
             "subcategory": self.subcategory,
             "current_value": self.estimated_value_aud,
@@ -158,6 +174,8 @@ class ItemSuggestion:
         return {
             "name": self.name,
             "brand": self.brand,
+            "model": self.model,
+            "serial_number": self.serial_number,
             "category": self.category,
             "subcategory": self.subcategory,
             "estimated_value_aud": self.estimated_value_aud,
@@ -174,6 +192,8 @@ class RecognitionResult:
     model: str
     duration_ms: int
     raw_response: str = ""
+    image_count: int = 1
+    ocr_text: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the result as a plain dictionary."""
@@ -182,6 +202,8 @@ class RecognitionResult:
             "model": self.model,
             "duration_ms": self.duration_ms,
             "count": len(self.suggestions),
+            "image_count": self.image_count,
+            "ocr_text": self.ocr_text,
         }
 
 
@@ -253,14 +275,29 @@ class AIService:
             loaded_models=loaded,
         )
 
-    async def recognize(self, image: bytes) -> RecognitionResult:
-        """Identify the items in one photograph."""
-        return await self._recognize_with(ITEM_RECOGNITION_PROMPT, image)
+    async def recognize(
+        self, images: bytes | list[bytes], *, ocr_text: str | None = None
+    ) -> RecognitionResult:
+        """Identify one item from one photograph, or from several of it.
 
-    async def bulk_scan(self, image: bytes) -> RecognitionResult:
+        Several photographs of the same item give the model the label, the
+        rating plate, and the shape. `ocr_text` holds what Tesseract read
+        from those photographs, which is where an exact model number and a
+        serial number come from.
+        """
+        pictures = [images] if isinstance(images, bytes) else list(images)
+        prompt = ITEM_RECOGNITION_PROMPT
+        if len(pictures) > 1:
+            prompt += MULTI_ANGLE_SUFFIX
+        return await self._recognize_with(prompt, pictures, ocr_text=ocr_text)
+
+    async def bulk_scan(
+        self, images: bytes | list[bytes], *, ocr_text: str | None = None
+    ) -> RecognitionResult:
         """Identify every item in a photograph of a shelf, drawer, or area."""
+        pictures = [images] if isinstance(images, bytes) else list(images)
         return await self._recognize_with(
-            ITEM_RECOGNITION_PROMPT + BULK_SCAN_SUFFIX, image
+            ITEM_RECOGNITION_PROMPT + BULK_SCAN_SUFFIX, pictures, ocr_text=ocr_text
         )
 
     async def parse_receipt(
@@ -353,13 +390,27 @@ class AIService:
 
     # -- internals ---------------------------------------------------------
 
-    async def _recognize_with(self, prompt: str, image: bytes) -> RecognitionResult:
+    async def _recognize_with(
+        self,
+        prompt: str,
+        images: list[bytes],
+        *,
+        ocr_text: str | None = None,
+    ) -> RecognitionResult:
         """Run one vision prompt and parse the item list out of the answer."""
-        if not image:
+        pictures = [image for image in images if image]
+        if not pictures:
             raise UpstreamError("The image is empty.")
+
+        if ocr_text and ocr_text.strip():
+            prompt += (
+                f"{TEXT_DETAIL_SUFFIX}\n\nThe text read from the photographs "
+                f"follows.\n\n{ocr_text.strip()[:4000]}"
+            )
+
         loop = asyncio.get_running_loop()
         started = loop.time()
-        response = await self.generate(prompt, images=[image])
+        response = await self.generate(prompt, images=pictures)
         duration_ms = int((loop.time() - started) * 1000)
 
         payload = extract_json_payload(response)
@@ -380,6 +431,8 @@ class AIService:
             model=self.config.model,
             duration_ms=duration_ms,
             raw_response=response,
+            image_count=len(pictures),
+            ocr_text=ocr_text or None,
         )
 
     def _client(self, *, timeout: float | None = None) -> httpx.AsyncClient:
@@ -510,6 +563,8 @@ def parse_suggestion(entry: dict[str, Any]) -> ItemSuggestion | None:
     return ItemSuggestion(
         name=name[:255],
         brand=_first_string(entry, ("brand", "manufacturer", "make")),
+        model=_first_string(entry, ("model", "model_number", "part_number")),
+        serial_number=_first_string(entry, ("serial_number", "serial", "serial_no")),
         category=_first_string(entry, ("category", "type")),
         subcategory=_first_string(entry, ("subcategory", "sub_category")),
         estimated_value_aud=coerce_number(

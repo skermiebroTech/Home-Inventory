@@ -166,14 +166,15 @@ export const nfc = {
 export const ai = {
   status: () => api.get<AiStatus>('/api/ai/status'),
   job: (id: string) => api.get<AiJob>(`/api/ai/jobs/${id}`),
-  recognize: (file: File) => {
+  /** Several photographs of one item read better than one. */
+  recognize: (files: File[]) => {
     const form = new FormData()
-    form.append('file', file)
+    for (const file of files) form.append('files', file)
     return api.upload<AiJob>('/api/ai/recognize', form)
   },
-  bulkScan: (file: File) => {
+  bulkScan: (files: File[]) => {
     const form = new FormData()
-    form.append('file', file)
+    for (const file of files) form.append('files', file)
     return api.upload<AiJob>('/api/ai/bulk-scan', form)
   },
   parseReceipt: (file: File) => {

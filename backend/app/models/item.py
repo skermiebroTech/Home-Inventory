@@ -138,6 +138,9 @@ class ItemPhoto(UUIDMixin, TimestampMixin, Base):
     ``thumbnail_path`` points at the smallest generated size. The larger sizes
     sit beside it in the same directory, named with their pixel width. See the
     upload conventions in CLAUDE.md.
+
+    ``ocr_text`` holds what Tesseract read from the photograph. The upload
+    route fills it after the reply, because OCR runs on the CPU.
     """
 
     __tablename__ = "item_photos"
@@ -154,6 +157,9 @@ class ItemPhoto(UUIDMixin, TimestampMixin, Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
     ai_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The text that Tesseract read from this photograph. A rating plate, a
+    # box, or a label often carries the model and the serial number.
+    ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     item: Mapped[Item] = relationship(back_populates="photos")
 

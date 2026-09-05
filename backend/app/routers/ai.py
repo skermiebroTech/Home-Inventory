@@ -38,7 +38,7 @@ from app.services.job_service import JobRecord, get_job_store
 from app.services.ocr_service import OCRService
 from app.services.ocr_service import ParsedReceipt as ParsedReceiptData
 from app.utils.auth import CurrentUser, SessionDep
-from app.utils.errors import not_found, unavailable
+from app.utils.errors import ApiError, not_found, unavailable
 from app.utils.queries import read_upload
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
@@ -62,6 +62,8 @@ def _recognize_result(result: RecognitionResult) -> RecognizeResult:
             RecognizedItem(
                 name=suggestion.name,
                 brand=suggestion.brand,
+                model=suggestion.model,
+                serial_number=suggestion.serial_number,
                 category=suggestion.category,
                 subcategory=suggestion.subcategory,
                 estimated_value_aud=suggestion.estimated_value_aud,
@@ -72,6 +74,8 @@ def _recognize_result(result: RecognitionResult) -> RecognizeResult:
         ],
         model=result.model,
         duration_ms=result.duration_ms,
+        image_count=result.image_count,
+        ocr_text=result.ocr_text,
     )
 
 
@@ -165,17 +169,44 @@ async def recognize(
     user: CurrentUser,
     session: SessionDep,
     response: Response,
-    file: Annotated[UploadFile, File(description="One image of one item.")],
+    files: Annotated[
+        list[UploadFile],
+        File(description="One or more photographs of the same item."),
+    ],
+    read_text: Annotated[
+        bool,
+        Query(
+            description=(
+                "Run OCR on the photographs first and give the text to the "
+                "model, so a rating plate fills the model and the serial "
+                "number."
+            )
+        ),
+    ] = True,
     wait: Annotated[
         bool,
         Query(description="Set false to return a job at once and never wait."),
     ] = True,
 ) -> Envelope[AiJob]:
-    image = await read_upload(file)
+    images = [await read_upload(upload) for upload in files]
+    if not images:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "no_image",
+            "Send at least one photograph.",
+        )
     service = AIService()
+    ocr = OCRService() if read_text else None
+
+    async def work() -> RecognitionResult:
+        # The text comes first. The model then reads the photographs with the
+        # label already spelled out for it.
+        text = await ocr.extract_text_many(images) if ocr else ""
+        return await service.recognize(images, ocr_text=text or None)
+
     return await _run_job(
         kind=AiJobKind.RECOGNIZE,
-        work=lambda: service.recognize(image),
+        work=work,
         user_id=user.id,
         response=response,
         wait=wait,
@@ -196,14 +227,30 @@ async def bulk_scan(
     user: CurrentUser,
     session: SessionDep,
     response: Response,
-    file: Annotated[UploadFile, File(description="One image of many items.")],
+    files: Annotated[
+        list[UploadFile],
+        File(description="One or more photographs of a shelf or a drawer."),
+    ],
+    read_text: Annotated[bool, Query()] = True,
     wait: Annotated[bool, Query()] = True,
 ) -> Envelope[AiJob]:
-    image = await read_upload(file)
+    images = [await read_upload(upload) for upload in files]
+    if not images:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "no_image",
+            "Send at least one photograph.",
+        )
     service = AIService()
+    ocr = OCRService() if read_text else None
+
+    async def work() -> RecognitionResult:
+        text = await ocr.extract_text_many(images) if ocr else ""
+        return await service.bulk_scan(images, ocr_text=text or None)
+
     return await _run_job(
         kind=AiJobKind.BULK_SCAN,
-        work=lambda: service.bulk_scan(image),
+        work=work,
         user_id=user.id,
         response=response,
         wait=wait,

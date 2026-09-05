@@ -21,24 +21,25 @@ export function AiPhotoButton({
   mode = 'recognize',
   label = 'Photograph an item',
 }: {
-  onResult: (items: RecognizedItem[], file: File) => void
+  onResult: (items: RecognizedItem[], files: File[], text: string | null) => void
   mode?: 'recognize' | 'bulk'
   label?: string
 }) {
   const status = useAiStatus()
   const input = useRef<HTMLInputElement>(null)
   const [job, setJob] = useState<AiJob | null>(null)
-  const [file, setFile] = useState<File | null>(null)
+  const [chosen, setChosen] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const followed = useAiJob(job)
 
   const off = status.data ? !status.data.enabled || !status.data.reachable : false
 
-  const start = async (chosen: File) => {
+  const start = async (picked: File[]) => {
     setBusy(true)
-    setFile(chosen)
+    setChosen(picked)
     try {
-      const started = mode === 'bulk' ? await ai.bulkScan(chosen) : await ai.recognize(chosen)
+      const started =
+        mode === 'bulk' ? await ai.bulkScan(picked) : await ai.recognize(picked)
       setJob(started)
     } catch (error) {
       toastError(error)
@@ -49,19 +50,24 @@ export function AiPhotoButton({
 
   // The job finished. Hand the result up once, after the render.
   useEffect(() => {
-    if (!followed.finished || !followed.job || !file) return
+    if (!followed.finished || !followed.job || chosen.length === 0) return
     const finished = followed.job
+    const files = chosen
     setJob(null)
-    setFile(null)
+    setChosen([])
     if (finished.status === 'succeeded' && finished.recognize_result) {
-      onResult(finished.recognize_result.items, file)
+      onResult(
+        finished.recognize_result.items,
+        files,
+        finished.recognize_result.ocr_text,
+      )
     } else {
       toastError(new Error(finished.error ?? 'The model returned nothing.'))
     }
     // `onResult` is a new function on every render of the parent, so it stays
     // out of the dependency list. The job identity is what matters here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followed.finished, followed.job, file])
+  }, [followed.finished, followed.job, chosen])
 
   return (
     <>
@@ -69,10 +75,11 @@ export function AiPhotoButton({
         ref={input}
         type="file"
         accept="image/*"
+        multiple
         hidden
         onChange={(event) => {
-          const chosen = event.target.files?.[0]
-          if (chosen) void start(chosen)
+          const picked = Array.from(event.target.files ?? [])
+          if (picked.length > 0) void start(picked)
           event.target.value = ''
         }}
       />
@@ -90,13 +97,20 @@ export function AiPhotoButton({
 
       <Modal
         open={job !== null}
-        title="The model is looking at the photograph"
+        title={
+          chosen.length > 1
+            ? `The model is reading ${chosen.length} photographs`
+            : 'The model is looking at the photograph'
+        }
         onClose={() => setJob(null)}
       >
         <div className="flex items-center gap-3 text-sm text-ink-600 dark:text-ink-300">
           <Spinner />
           <div>
-            <p>This runs on the CPU, so it takes a while.</p>
+            <p>
+              The server reads the text on the photographs first, then the
+              model looks at them. Both run on the CPU, so it takes a while.
+            </p>
             <p className="mt-1 text-ink-500">
               You may close this window. The scan keeps running.
             </p>

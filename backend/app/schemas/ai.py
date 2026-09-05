@@ -45,6 +45,12 @@ class RecognizedItem(BaseModel):
 
     name: str
     brand: str | None = None
+    model: str | None = Field(
+        default=None, description="Read from a label or a rating plate."
+    )
+    serial_number: str | None = Field(
+        default=None, description="Only when the text of a photograph shows it."
+    )
     category: str | None = None
     subcategory: str | None = None
     estimated_value_aud: Decimal | None = None
@@ -69,6 +75,13 @@ class RecognizeResult(BaseModel):
     items: list[RecognizedItem] = Field(default_factory=list)
     model: str
     duration_ms: int
+    image_count: int = Field(
+        default=1, description="How many photographs the model read."
+    )
+    ocr_text: str | None = Field(
+        default=None,
+        description="The text that OCR read from the photographs, if any.",
+    )
 
 
 class AiJob(BaseModel):
