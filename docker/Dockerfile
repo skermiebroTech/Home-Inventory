@@ -77,7 +77,12 @@ COPY --from=frontend /build/dist ./static
 RUN chmod +x /app/backend/entrypoint.sh
 
 EXPOSE 7850
-VOLUME ["/data"]
+
+# No VOLUME line. The four directories under /data are bind mounted by the
+# person who runs the container, and a VOLUME declaration only adds a
+# nameless volume for /data itself. Docker leaves one behind on every
+# recreate, and they pile up inside the Docker image file, which is the disk
+# that runs out first on Unraid.
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS http://localhost:7850/api/health || exit 1
