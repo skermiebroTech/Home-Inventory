@@ -58,6 +58,10 @@
     Description="Application settings that the web interface writes."
     Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/homestock/config</Config>
 
+  <Config Name="Phone models" Target="/data/models" Default="/mnt/user/appdata/homestock/models"
+    Description="The vision models that a phone downloads for recognition without the server. Empty until you ask for one. Map it, or every container update throws the download away."
+    Mode="rw" Type="Path" Display="advanced" Required="false">/mnt/user/appdata/homestock/models</Config>
+
   <Config Name="Database URL" Target="HS_DATABASE_URL"
     Default="postgresql+asyncpg://homestock:CHANGE_ME@192.168.1.10:5432/homestock"
     Description="The PostgreSQL 16 connection string. Use the IP address of your PostgreSQL container, not localhost."

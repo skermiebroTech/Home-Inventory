@@ -10,7 +10,7 @@ account is necessary.
 ## 1. Make the directories
 
 ```bash
-mkdir -p /mnt/user/appdata/homestock/{db,uploads,backups,config}
+mkdir -p /mnt/user/appdata/homestock/{db,uploads,backups,config,models}
 ```
 
 ## 2. Make the private network
@@ -86,6 +86,7 @@ docker run -d \
   -v /mnt/user/appdata/homestock/uploads:/data/uploads \
   -v /mnt/user/appdata/homestock/backups:/data/backups \
   -v /mnt/user/appdata/homestock/config:/data/config \
+  -v /mnt/user/appdata/homestock/models:/data/models \
   homestock:latest
 ```
 
@@ -140,7 +141,9 @@ cd /tmp/homestock-src && rm -rf ./* && \
   | tar xz --strip-components=1
 docker build -t homestock:latest -f docker/Dockerfile .
 docker rm -f homestock
-# run the command in step 5 again, with the same secret key:
+# run the command in step 5 again, with the same secret key and the same
+# five volumes. The models directory is one of them: leave it out and the
+# phone models are gone.
 SECRET_KEY=$(cat /mnt/user/appdata/homestock/config/secret-key.txt)
 ```
 
@@ -178,6 +181,29 @@ database address, and the fields carry the rest.
 
 The template holds no database path, because PostgreSQL runs in its own
 container. Step 3 starts that one.
+
+## The models that a phone runs
+
+A phone can name an item without the server, which suits a server with no
+GPU. It needs a vision model of half a gigabyte or more, and the public host
+that holds those files is slow: one measured download ran at 338 kB/s, which
+is twenty minutes for the small model.
+
+The server fetches each file once and hands it out on the local network, so
+every phone after the first takes a minute. Ask for it from the phone, in
+**More → Recognition on the phone → Keep on the server**, or from the
+terminal:
+
+```bash
+curl -fsS -X POST http://localhost:7850/api/models/smolvlm2-500m/fetch \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The files land in `/data/models`, which step 5 maps to
+`/mnt/user/appdata/homestock/models`. **Without that mapping the download
+lives in the container and a container update throws it away.** The directory
+holds nothing until you ask for a model, and `DELETE /api/models/{id}` gives
+the space back.
 
 ## 10. Backups
 
