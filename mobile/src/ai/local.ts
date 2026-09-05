@@ -128,6 +128,11 @@ export async function askServerToCache(model: LocalModel): Promise<void> {
   await api.post(`/api/models/${model.id}/fetch`, {})
 }
 
+/** Tell the server to stop fetching this model and give the space back. */
+export async function forgetOnServer(model: LocalModel): Promise<void> {
+  await api.delete(`/api/models/${model.id}`)
+}
+
 /**
  * Where each file should come from.
  *

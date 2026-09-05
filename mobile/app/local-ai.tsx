@@ -8,7 +8,7 @@
 
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, ScrollView, View } from 'react-native'
 
 import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
@@ -17,6 +17,7 @@ import {
   MODELS,
   askServerToCache,
   cancel,
+  forgetOnServer,
   download,
   remove,
   serverModels,
@@ -41,6 +42,32 @@ export default function LocalAi() {
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [paused, setPaused] = useState<LocalModel | null>(null)
   const [onServer, setOnServer] = useState<ServerModel[]>([])
+  //: The last reading of each server fetch, so the rate can be worked out.
+  const samples = useRef<Record<string, { bytes: number; at: number; rate: number }>>(
+    {},
+  )
+
+  /** Read the server again and work out how fast each fetch is going. */
+  const refreshServer = useCallback(async (): Promise<void> => {
+    const rows = await serverModels()
+    const now = Date.now()
+    for (const row of rows) {
+      const last = samples.current[row.id]
+      if (last && row.cached_bytes > last.bytes) {
+        const seconds = (now - last.at) / 1000
+        const sample = seconds > 0 ? (row.cached_bytes - last.bytes) / seconds : 0
+        samples.current[row.id] = {
+          bytes: row.cached_bytes,
+          at: now,
+          // Smoothed, like the download on the phone. A raw reading jumps.
+          rate: last.rate ? last.rate * 0.7 + sample * 0.3 : sample,
+        }
+      } else if (!last) {
+        samples.current[row.id] = { bytes: row.cached_bytes, at: now, rate: 0 }
+      }
+    }
+    setOnServer(rows)
+  }, [])
 
   const load = useCallback(async () => {
     const state: Record<string, boolean> = {}
@@ -53,8 +80,8 @@ export default function LocalAi() {
     setReady(state)
     setOnDisk(sizes)
     setPaused(await unfinished())
-    setOnServer(await serverModels())
-  }, [])
+    await refreshServer()
+  }, [refreshServer])
 
   const fetchModel = async (model: LocalModel): Promise<void> => {
     setBusy(model.id)
@@ -81,6 +108,14 @@ export default function LocalAi() {
     }
   }
 
+  // The server takes many minutes over a model. Ask it again while it works,
+  // so the screen moves instead of showing one figure until somebody leaves.
+  useEffect(() => {
+    if (!onServer.some((one) => one.fetching)) return
+    const timer = setInterval(() => void refreshServer(), 3000)
+    return () => clearInterval(timer)
+  }, [onServer, refreshServer])
+
   const cacheOnServer = async (model: LocalModel): Promise<void> => {
     try {
       await askServerToCache(model)
@@ -95,6 +130,18 @@ export default function LocalAi() {
         'The server would not',
         error instanceof Error ? error.message : 'It may be away.',
       )
+    }
+  }
+
+  const serverRate = (id: string): number => samples.current[id]?.rate ?? 0
+
+  /** Tell the server to stop fetching, and to throw the part away. */
+  const stopServer = async (model: LocalModel): Promise<void> => {
+    try {
+      await forgetOnServer(model)
+    } finally {
+      delete samples.current[model.id]
+      await refreshServer()
     }
   }
 
@@ -167,15 +214,11 @@ export default function LocalAi() {
                       phone.
                     </Caption>
                   ) : null}
-                  {!ready[model.id] ? (
+                  {!ready[model.id] && !held?.fetching ? (
                     <Caption tone={held?.ready ? theme.accent : undefined}>
                       {held?.ready
                         ? 'Your server holds it. The download stays on your network.'
-                        : held?.fetching
-                          ? `Your server is fetching it: ${formatBytes(
-                              held.cached_bytes,
-                            )} of ${formatBytes(held.bytes)}.`
-                          : 'From the internet. Your server does not hold it.'}
+                        : 'From the internet. Your server does not hold it.'}
                     </Caption>
                   ) : null}
                 </View>
@@ -183,6 +226,33 @@ export default function LocalAi() {
                   <Ionicons name="checkmark-circle" size={22} color={theme.accent} />
                 ) : null}
               </View>
+
+              {held?.fetching ? (
+                <View style={{ marginTop: spacing.md, gap: 6 }}>
+                  <ProgressBar
+                    fraction={held.bytes > 0 ? held.cached_bytes / held.bytes : 0}
+                  />
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Caption>
+                      Your server: {formatBytes(held.cached_bytes)} of{' '}
+                      {formatBytes(held.bytes)}
+                    </Caption>
+                    <View style={{ flex: 1 }} />
+                    <Caption>
+                      {serverRate(model.id) > 0
+                        ? `${formatBytes(serverRate(model.id))}/s`
+                        : 'Starting'}
+                    </Caption>
+                  </View>
+                  <Caption>
+                    {serverRate(model.id) > 0
+                      ? `${formatWait(
+                          (held.bytes - held.cached_bytes) / serverRate(model.id),
+                        )} left. You can leave this screen.`
+                      : 'You can leave this screen.'}
+                  </Caption>
+                </View>
+              ) : null}
 
               {working ? (
                 <View style={{ marginTop: spacing.md, gap: 6 }}>
@@ -265,7 +335,14 @@ export default function LocalAi() {
                           disabled={busy !== null}
                         />
                       ) : null}
-                      {!held?.ready && !held?.fetching ? (
+                      {held?.fetching ? (
+                        <Button
+                          title="Stop the server"
+                          variant="secondary"
+                          icon="close"
+                          onPress={() => void stopServer(model)}
+                        />
+                      ) : !held?.ready ? (
                         <Button
                           title="Keep on the server"
                           variant="secondary"
