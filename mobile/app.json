@@ -55,15 +55,11 @@
       ],
       "react-native-nfc-manager",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
-      }
     }
   }
 }

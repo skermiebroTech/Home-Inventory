@@ -7,7 +7,7 @@
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Stack, useRouter, useSegments } from 'expo-router'
+import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useEffect, useRef, useState } from 'react'
 import { AppState, type AppStateStatus, View } from 'react-native'
@@ -55,7 +55,17 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <StatusBar style={theme.dark ? 'light' : 'dark'} />
           <SessionGate />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.bg } }}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.bg },
+              // Without these, the header keeps the light theme of the
+              // system while the screen below it is dark.
+              headerStyle: { backgroundColor: theme.card },
+              headerTintColor: theme.text,
+              headerTitleStyle: { color: theme.text },
+            }}
+          >
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="items/[id]" options={{ headerShown: true, title: 'Item' }} />
@@ -75,16 +85,21 @@ export default function RootLayout() {
 function SessionGate() {
   const router = useRouter()
   const segments = useSegments()
+  // The navigator mounts after the first render. A replace before that
+  // throws "Attempted to navigate before mounting the Root Layout", so the
+  // gate waits for the key of the root navigation state.
+  const navigationState = useRootNavigationState()
   const accessToken = useAuthStore((state) => state.accessToken)
   const syncOnOpen = useSettingsStore((state) => state.syncOnOpen)
   const reminders = useSettingsStore((state) => state.reminders)
   const appState = useRef(AppState.currentState)
 
   useEffect(() => {
+    if (!navigationState?.key) return
     const inAuth = segments[0] === '(auth)'
     if (!accessToken && !inAuth) router.replace('/(auth)/login')
     if (accessToken && inAuth) router.replace('/(tabs)/home')
-  }, [accessToken, segments, router])
+  }, [accessToken, segments, router, navigationState?.key])
 
   useEffect(() => {
     if (!accessToken || !syncOnOpen) return

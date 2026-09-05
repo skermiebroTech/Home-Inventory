@@ -6,7 +6,7 @@ import { Alert, ScrollView, Switch, View } from 'react-native'
 
 import { Body, Button, Caption, Card, ListRow, Screen, Title } from '@/components/ui'
 import { listItems, listLocations, listMaintenance, listTags, resetDatabase } from '@/db'
-import { relativeTime } from '@/lib/format'
+import { plural, relativeTime } from '@/lib/format'
 import { NfcUnavailableError, scanAndLookup } from '@/lib/nfc'
 import { clearReminders, scheduleReminders } from '@/lib/notifications'
 import { useAuthStore } from '@/store/auth'
@@ -62,25 +62,25 @@ export default function More() {
         <Card style={{ padding: 0 }}>
           <ListRow
             title="Locations"
-            subtitle={`${counts.locations} rooms, zones, and containers`}
+            subtitle={`${plural(counts.locations, 'room, zone, or container', 'rooms, zones, and containers')}`}
             icon="map"
             onPress={() => router.push('/(tabs)/items')}
           />
           <ListRow
             title="Tags"
-            subtitle={`${counts.tags} tags`}
+            subtitle={plural(counts.tags, 'tag')}
             icon="pricetags"
             onPress={() => router.push('/(tabs)/items')}
           />
           <ListRow
             title="Out on loan"
-            subtitle={`${counts.lent} items`}
+            subtitle={plural(counts.lent, 'item')}
             icon="hand-left"
             onPress={() => router.push('/(tabs)/items')}
           />
           <ListRow
             title="Maintenance"
-            subtitle={`${counts.due} dates recorded`}
+            subtitle={`${plural(counts.due, 'date')} recorded`}
             icon="construct"
             onPress={() => router.push('/(tabs)/home')}
           />
@@ -95,8 +95,8 @@ export default function More() {
         <Card>
           <Body weight="600">Sync</Body>
           <Caption>
-            Last sync {relativeTime(sync.lastSync)}. {sync.pending} changes and{' '}
-            {sync.queuedPhotos} photographs are waiting.
+            Last sync {relativeTime(sync.lastSync)}. {plural(sync.pending, 'change')} and{' '}
+            {plural(sync.queuedPhotos, 'photograph')} are waiting.
           </Caption>
           <View style={{ marginTop: spacing.md }}>
             <Button

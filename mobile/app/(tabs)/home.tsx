@@ -2,12 +2,12 @@
 
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect, useRouter } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { Badge, Body, Button, Caption, Card, ListRow, Screen, Title } from '@/components/ui'
 import { listItems, listMaintenance, type LocalItem } from '@/db'
-import { daysUntil, formatMoney, relativeTime } from '@/lib/format'
+import { daysUntil, formatMoney, plural, relativeTime } from '@/lib/format'
 import type { MaintenanceLog } from '@/api/types'
 import { useAuthStore } from '@/store/auth'
 import { useSyncStore } from '@/store/sync'
@@ -59,6 +59,12 @@ export default function Home() {
     }, [load]),
   )
 
+  // The first sync finishes after this screen has already read the database.
+  // Reading again when the sync stamp changes keeps the numbers honest.
+  useEffect(() => {
+    void load()
+  }, [load, sync.lastSync])
+
   const refresh = async (): Promise<void> => {
     await sync.run()
     await load()
@@ -76,8 +82,10 @@ export default function Home() {
           <Title>Hello {user?.name?.split(' ')[0] ?? 'there'}</Title>
           <Caption>
             Synced {relativeTime(sync.lastSync)}
-            {sync.pending > 0 ? ` · ${sync.pending} waiting to send` : ''}
-            {sync.queuedPhotos > 0 ? ` · ${sync.queuedPhotos} photographs queued` : ''}
+            {sync.pending > 0 ? ` · ${plural(sync.pending, 'change')} waiting` : ''}
+            {sync.queuedPhotos > 0
+              ? ` · ${plural(sync.queuedPhotos, 'photograph')} queued`
+              : ''}
           </Caption>
         </View>
 
@@ -150,7 +158,7 @@ export default function Home() {
           <Card>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <Ionicons name="hand-left" size={18} color={theme.warn} />
-              <Body>{totals.lent} items are out on loan.</Body>
+              <Body>{plural(totals.lent, 'item')} out on loan.</Body>
             </View>
           </Card>
         ) : null}

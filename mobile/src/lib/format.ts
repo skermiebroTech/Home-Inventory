@@ -36,3 +36,8 @@ export function daysUntil(value: string | null | undefined): number | null {
   today.setHours(0, 0, 0, 0)
   return Math.round((target - today.getTime()) / 86400000)
 }
+
+/** Return "1 change" or "3 changes". */
+export function plural(count: number, one: string, many?: string): string {
+  return `${count} ${count === 1 ? one : (many ?? `${one}s`)}`
+}
