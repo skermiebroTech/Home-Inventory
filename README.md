@@ -7,12 +7,23 @@ Photograph an item and a local AI model fills the form. Photograph a receipt
 and the server reads it. Print a QR label for a box. Nothing leaves your
 server.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![The dashboard](docs/screenshots/dashboard.png)
+
+One item holds its photographs, the parts fitted to it, the service history,
+and a log of every change. The coloured squares are test photographs.
+
+![One item](docs/screenshots/item.png)
 
 | | |
 |---|---|
-| ![Items](docs/screenshots/items.png) | ![Item detail](docs/screenshots/item-detail.png) |
-| ![Scan](docs/screenshots/mobile-scan.png) | ![Labels](docs/screenshots/labels.png) |
+| ![The item list](docs/screenshots/items.png) | ![The cables](docs/screenshots/cables.png) |
+| ![The spares shelf](docs/screenshots/spares.png) | ![The labels](docs/screenshots/labels.png) |
+
+The phone carries the same data and reads it with no signal.
+
+| | |
+|---|---|
+| <img src="docs/screenshots/phone-cables.png" width="260" alt="The cables on a phone"> | <img src="docs/screenshots/phone-spares.png" width="260" alt="The spares on a phone"> |
 
 ## What it does
 
