@@ -31,6 +31,9 @@ The phone carries the same data and reads it with no signal.
   server reads any text it finds first, so a picture of the rating plate gives
   the exact model and the serial number. A model on your own server then names
   the item and guesses the category and the value.
+- **Recognition on the phone.** The phone can hold the model itself. It reads
+  the photograph with no server and no network, which suits an old server
+  with no GPU. One download in the More tab, and it can be deleted again.
 - **Receipt reading.** Photograph a receipt. Tesseract reads the text, a model
   turns it into fields, and you link the lines to items.
 - **Barcodes.** Scan a product code. HomeStock asks Open Food Facts and

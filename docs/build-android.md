@@ -84,6 +84,26 @@ Android blocks plain HTTP from Android 9, so
 `expo-build-properties`. Remove that setting on the day the server answers on
 HTTPS.
 
+## The size of the file
+
+The build carries a native library for each processor family, and the engine
+that runs a model on the phone is large. `plugins/with-arm64-only.js` keeps
+`arm64-v8a` alone, which halves the file. Every Android phone sold since
+about 2017 is arm64, and so is the emulator on an Apple computer.
+
+For an old 32 bit phone, or an x86 emulator:
+
+```bash
+HOMESTOCK_ALL_ARCHITECTURES=1 npx expo prebuild --platform android
+```
+
+## The model on the phone
+
+The weights are not in the APK. The application downloads them into its own
+directory when a person asks for them, in **More → Recognition on the
+phone**, and deletes them from the same screen. A download that stops carries
+on from the bytes that arrived.
+
 ## A new version
 
 Raise `expo.version` and `expo.android.versionCode` in
