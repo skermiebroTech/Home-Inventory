@@ -34,8 +34,26 @@ fi
 # --- Wait for the database ---
 # The application container usually starts before PostgreSQL accepts
 # connections. Alembic fails at once if it cannot connect, so wait first.
-DB_HOST="${POSTGRES_HOST:-postgres}"
-DB_PORT="${POSTGRES_PORT:-5432}"
+#
+# The address comes from the database URL when there is one, because a
+# person who writes HS_DATABASE_URL never thinks to set POSTGRES_HOST as
+# well. Without this the wait watches a host that does not exist, and every
+# start loses a minute to it.
+DB_URL="${HS_DATABASE_URL:-${DATABASE_URL:-}}"
+DB_HOST="${POSTGRES_HOST:-}"
+DB_PORT="${POSTGRES_PORT:-}"
+case "$DB_URL" in *@*) ;; *) DB_URL="" ;; esac
+if [ -z "$DB_HOST" ] && [ -n "$DB_URL" ]; then
+    # postgresql+asyncpg://user:password@host:port/name -> host and port
+    DB_ADDRESS="${DB_URL#*@}"
+    DB_ADDRESS="${DB_ADDRESS%%/*}"
+    DB_HOST="${DB_ADDRESS%%:*}"
+    case "$DB_ADDRESS" in
+        *:*) DB_PORT="${DB_PORT:-${DB_ADDRESS##*:}}" ;;
+    esac
+fi
+DB_HOST="${DB_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
 if command -v pg_isready >/dev/null 2>&1; then
     i=0
     while [ "$i" -lt 60 ]; do
