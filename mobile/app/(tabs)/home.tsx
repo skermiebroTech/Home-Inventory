@@ -96,6 +96,19 @@ export default function Home() {
           </Card>
         ) : null}
 
+        {sync.lastFailures.length > 0 ? (
+          <Card style={{ borderColor: theme.danger }}>
+            <Caption tone={theme.danger}>
+              {plural(sync.lastFailures.length, 'change')} could not be sent.
+              {' '}
+              {sync.lastFailures[0]}
+            </Caption>
+            <Caption>
+              The change is still on the phone. Correct it and sync again.
+            </Caption>
+          </Card>
+        ) : null}
+
         {sync.lastConflicts > 0 ? (
           <Card style={{ borderColor: theme.warn }}>
             <Caption tone={theme.warn}>

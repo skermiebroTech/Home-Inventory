@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { Image } from 'expo-image'
 import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Alert, ScrollView, View } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 
@@ -50,6 +50,12 @@ export default function ItemScreen() {
       void load()
     }, [load]),
   )
+
+  // A sync that finishes while this screen is open changes the row under it,
+  // so the screen reads it again.
+  useEffect(() => {
+    void load()
+  }, [load, sync.lastSync])
 
   if (!item) return <Loading label="Reading the item" />
 
@@ -108,23 +114,16 @@ export default function ItemScreen() {
 
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Button
-            title="Photograph"
-            icon="camera"
-            variant="secondary"
-            onPress={() => void addPhoto()}
-            style={{ flex: 1 }}
-          />
-          <Button
-            title="Library"
-            icon="images"
-            variant="secondary"
-            onPress={() => void addFromLibrary()}
+            title="Edit"
+            icon="create"
+            onPress={() => router.push(`/items/${item.id}/edit`)}
             style={{ flex: 1 }}
           />
           {item.is_lent ? (
             <Button
               title="Returned"
               icon="arrow-undo"
+              variant="secondary"
               style={{ flex: 1 }}
               onPress={async () => {
                 await returnItem(item.id)
@@ -141,6 +140,23 @@ export default function ItemScreen() {
               onPress={() => setShowLend((open) => !open)}
             />
           )}
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Button
+            title="Photograph"
+            icon="camera"
+            variant="secondary"
+            onPress={() => void addPhoto()}
+            style={{ flex: 1 }}
+          />
+          <Button
+            title="Library"
+            icon="images"
+            variant="secondary"
+            onPress={() => void addFromLibrary()}
+            style={{ flex: 1 }}
+          />
         </View>
 
         {showLend ? (

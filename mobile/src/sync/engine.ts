@@ -42,6 +42,8 @@ export interface SyncSummary {
   photos: number
   serverTime: string | null
   error: string | null
+  /** One message for each change that the server refused. */
+  failures: string[]
 }
 
 export async function isOnline(): Promise<boolean> {
@@ -99,9 +101,13 @@ export async function pull(): Promise<{ count: number; serverTime: string }> {
 }
 
 /** Send every queued change. Return how many the server took. */
-export async function push(): Promise<{ applied: number; conflicts: number }> {
+export async function push(): Promise<{
+  applied: number
+  conflicts: number
+  failures: string[]
+}> {
   const rows = (await readOutbox()).filter((row) => row.tries < MAX_TRIES)
-  if (rows.length === 0) return { applied: 0, conflicts: 0 }
+  if (rows.length === 0) return { applied: 0, conflicts: 0, failures: [] }
 
   const changes: SyncChange[] = rows.map((row) => ({
     entity: row.entity,
@@ -114,12 +120,31 @@ export async function push(): Promise<{ applied: number; conflicts: number }> {
 
   const result = await api.post<SyncPushResult>('/api/sync/push', { changes })
 
-  // The server answered for the whole batch. A conflict is not a failure of
-  // the queue: the server copy wins, and the next pull brings it down.
-  // A conflict is settled, not pending: the server copy wins, so the queued
+  // A change that the server could not write stays in the queue, with the
+  // reason on it. Clearing it would throw away the work of the person who
+  // made it, and that is the one thing an offline application must not do.
+  const failed = new Map(
+    (result.errors ?? []).map((entry) => [entry.id, entry.message]),
+  )
+
+  // A conflict is settled, not failed: the server copy wins, so the queued
   // edit goes away and the next pull brings the server row down.
-  await clearOutbox(rows.map((row) => row.id))
-  return { applied: result.applied, conflicts: result.conflicts.length }
+  await clearOutbox(
+    rows.filter((row) => !failed.has(row.record_id)).map((row) => row.id),
+  )
+
+  for (const row of rows.filter((entry) => failed.has(entry.record_id))) {
+    await markOutboxError(
+      row.id,
+      failed.get(row.record_id) ?? 'The server refused this change.',
+    )
+  }
+
+  return {
+    applied: result.applied,
+    conflicts: result.conflicts.length,
+    failures: (result.errors ?? []).map((entry) => entry.message),
+  }
 }
 
 /** Upload the queued photographs. Return how many went up. */
@@ -156,6 +181,7 @@ export async function syncNow(options: { wifiOnly: boolean }): Promise<SyncSumma
     photos: 0,
     serverTime: null,
     error: null,
+    failures: [],
   }
 
   if (!(await isOnline())) {
@@ -169,6 +195,7 @@ export async function syncNow(options: { wifiOnly: boolean }): Promise<SyncSumma
     const pushed = await push()
     summary.pushed = pushed.applied
     summary.conflicts = pushed.conflicts
+    summary.failures = pushed.failures
 
     const pulled = await pull()
     summary.pulled = pulled.count

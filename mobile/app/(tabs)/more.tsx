@@ -98,6 +98,17 @@ export default function More() {
             Last sync {relativeTime(sync.lastSync)}. {plural(sync.pending, 'change')} and{' '}
             {plural(sync.queuedPhotos, 'photograph')} are waiting.
           </Caption>
+          {sync.lastFailures.length > 0 ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Caption tone={theme.danger}>
+                {plural(sync.lastFailures.length, 'change')} could not be sent:
+              </Caption>
+              {sync.lastFailures.slice(0, 3).map((message) => (
+                <Caption key={message}>{message}</Caption>
+              ))}
+            </View>
+          ) : null}
+
           <View style={{ marginTop: spacing.md }}>
             <Button
               title={sync.running ? 'Syncing' : 'Sync now'}

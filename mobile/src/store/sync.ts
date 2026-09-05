@@ -13,6 +13,8 @@ interface SyncState {
   queuedPhotos: number
   lastError: string | null
   lastConflicts: number
+  /** One message for each change that the server refused. */
+  lastFailures: string[]
   refreshCounts: () => Promise<void>
   run: () => Promise<SyncSummary | null>
 }
@@ -24,6 +26,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   queuedPhotos: 0,
   lastError: null,
   lastConflicts: 0,
+  lastFailures: [],
 
   refreshCounts: async () => {
     set({
@@ -43,6 +46,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       set({
         lastError: summary.error,
         lastConflicts: summary.conflicts,
+        lastFailures: summary.failures,
         lastSync: summary.serverTime ?? get().lastSync,
       })
       await get().refreshCounts()

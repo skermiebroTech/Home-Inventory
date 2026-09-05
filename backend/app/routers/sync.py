@@ -24,6 +24,7 @@ from app.schemas.sync import (
     SyncChanges,
     SyncConflict,
     SyncEntity,
+    SyncError,
     SyncPush,
     SyncPushResult,
 )
@@ -71,6 +72,10 @@ REGISTRY = SyncRegistry(
         ),
     ]
 )
+
+#: The names that `SyncEntity` accepts. A change with any other name failed
+#: before it reached a resource, and it has no entity to report.
+SYNC_ENTITIES: frozenset[str] = frozenset(entry.value for entry in SyncEntity)
 
 #: Which response schema reads which table.
 READERS: dict[str, Any] = {
@@ -169,6 +174,15 @@ async def push_changes(
         )
         for outcome in result.conflicts
     ]
+    errors = [
+        SyncError(
+            entity=SyncEntity(outcome.resource),
+            id=outcome.record_id,
+            message=outcome.error or "The change did not apply.",
+        )
+        for outcome in result.errors
+        if outcome.resource in SYNC_ENTITIES
+    ]
     rejected = len(result.outcomes) - len(result.applied)
 
     return ok(
@@ -176,6 +190,7 @@ async def push_changes(
             applied=len(result.applied),
             rejected=rejected,
             conflicts=conflicts,
+            errors=errors,
             server_time=result.server_time,
         )
     )

@@ -26,7 +26,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 
 from sqlalchemy import Select, inspect, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -282,7 +282,11 @@ async def apply_push(
         resource_name = str(change.get("resource", ""))
         record_id = change.get("id")
         try:
-            outcomes.append(await _apply_one(session, registry, change, user_id))
+            # Each change gets a savepoint. A database failure then rolls
+            # back that change alone, and every change before it in the
+            # batch still counts.
+            async with session.begin_nested():
+                outcomes.append(await _apply_one(session, registry, change, user_id))
         except ValidationError as exc:
             outcomes.append(
                 PushOutcome(
@@ -294,7 +298,8 @@ async def apply_push(
                 )
             )
         except SQLAlchemyError as exc:
-            await session.rollback()
+            # The savepoint is already rolled back. The session stays usable,
+            # so the rest of the batch goes on.
             logger.warning("A pushed change failed: %s", exc)
             outcomes.append(
                 PushOutcome(
@@ -302,12 +307,30 @@ async def apply_push(
                     resource=resource_name,
                     record_id=_safe_uuid(record_id),
                     op=str(change.get("op", "")),
-                    error="The database refused this change.",
+                    error=_readable_error(exc),
                 )
             )
 
     await session.commit()
     return PushResult(server_time=utc_now(), outcomes=outcomes)
+
+
+def _readable_error(exc: SQLAlchemyError) -> str:
+    """Turn a database failure into a sentence that names the cause.
+
+    The common one is a change that points at a row this server does not
+    have, such as a location that another client deleted.
+    """
+    if isinstance(exc, IntegrityError):
+        text = str(exc.orig or exc)
+        if "ForeignKeyViolation" in text or "foreign key" in text.lower():
+            return (
+                "This change names a row that the server does not have, such "
+                "as a location that is gone. Correct it and send it again."
+            )
+        if "UniqueViolation" in text or "duplicate key" in text.lower():
+            return "A row with that value already exists on the server."
+    return "The database refused this change."
 
 
 async def _apply_one(

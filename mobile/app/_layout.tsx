@@ -68,8 +68,18 @@ export default function RootLayout() {
           >
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="items/[id]" options={{ headerShown: true, title: 'Item' }} />
-            <Stack.Screen name="items/add" options={{ headerShown: true, title: 'Add an item' }} />
+            <Stack.Screen
+              name="items/[id]/index"
+              options={{ headerShown: true, title: 'Item' }}
+            />
+            <Stack.Screen
+              name="items/[id]/edit"
+              options={{ headerShown: true, title: 'Edit the item' }}
+            />
+            <Stack.Screen
+              name="items/add"
+              options={{ headerShown: true, title: 'Add an item' }}
+            />
             <Stack.Screen
               name="receipts/[id]"
               options={{ headerShown: true, title: 'Receipt' }}

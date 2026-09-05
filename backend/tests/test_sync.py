@@ -441,3 +441,64 @@ async def test_a_pushed_change_comes_back_in_the_next_pull(
     )
     changes = await pull(client, headers, since=marker)
     assert [i["id"] for i in changes["items"]] == [new_id]
+
+
+async def test_a_change_that_names_a_missing_row_is_reported(
+    client: AsyncClient, headers: dict[str, str]
+) -> None:
+    """A push must say which change failed, and why, or the client loses it."""
+    result = await push(
+        client,
+        headers,
+        {
+            "entity": "item",
+            "op": "create",
+            "id": str(uuid.uuid4()),
+            "payload": {
+                "name": "Item in a location that is gone",
+                # No location on this server carries this id.
+                "location_id": str(uuid.uuid4()),
+            },
+            "client_updated_at": now(),
+        },
+    )
+    assert result["applied"] == 0
+    assert result["rejected"] == 1
+    assert len(result["errors"]) == 1
+
+    failure = result["errors"][0]
+    assert failure["entity"] == "item"
+    assert "does not have" in failure["message"]
+
+    # The row never appeared.
+    listing = await client.get("/api/items", headers=headers)
+    assert listing.json()["data"]["total"] == 0
+
+
+async def test_one_bad_change_does_not_stop_the_good_ones(
+    client: AsyncClient, headers: dict[str, str]
+) -> None:
+    good_id = str(uuid.uuid4())
+    result = await push(
+        client,
+        headers,
+        {
+            "entity": "item",
+            "op": "create",
+            "id": good_id,
+            "payload": {"name": "This one is fine"},
+            "client_updated_at": now(),
+        },
+        {
+            "entity": "item",
+            "op": "create",
+            "id": str(uuid.uuid4()),
+            "payload": {"name": "This one is not", "location_id": str(uuid.uuid4())},
+            "client_updated_at": now(),
+        },
+    )
+    assert result["applied"] == 1
+    assert len(result["errors"]) == 1
+    assert (
+        await client.get(f"/api/items/{good_id}", headers=headers)
+    ).status_code == 200

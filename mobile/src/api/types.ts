@@ -264,5 +264,7 @@ export interface SyncPushResult {
   applied: number
   rejected: number
   conflicts: Array<{ entity: SyncEntity; id: string; reason: string; server_version: number }>
+  /** Changes that never applied. The phone keeps these and tries again. */
+  errors: Array<{ entity: SyncEntity; id: string; message: string }>
   server_time: string
 }

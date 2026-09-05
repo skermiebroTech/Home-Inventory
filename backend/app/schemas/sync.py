@@ -100,10 +100,26 @@ class SyncConflict(BaseModel):
     server_version: int
 
 
+class SyncError(BaseModel):
+    """A change that the server could not write at all.
+
+    A conflict is not an error: the server simply held a newer copy. This is
+    a change that never applied, so the client must keep it and fix it.
+    """
+
+    entity: SyncEntity
+    id: uuid.UUID
+    message: str
+
+
 class SyncPushResult(BaseModel):
     """What the server did with a pushed batch."""
 
     applied: int
     rejected: int
     conflicts: list[SyncConflict] = Field(default_factory=list)
+    errors: list[SyncError] = Field(
+        default_factory=list,
+        description="Changes that failed. The client keeps these and retries.",
+    )
     server_time: datetime
