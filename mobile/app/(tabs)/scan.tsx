@@ -19,8 +19,10 @@ import { Alert, Image, Pressable, ScrollView, View } from 'react-native'
 import { api } from '@/api/client'
 import type { AiJob, BarcodeProduct, ReceiptDetail } from '@/api/types'
 import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
+import { MODELS, recognize as recognizeLocally, statusOf } from '@/ai/local'
 import { getItemByTag } from '@/db'
 import { isOnline } from '@/sync/engine'
+import { useSettingsStore } from '@/store/settings'
 import { radius, spacing, useTheme } from '@/theme'
 
 type Mode = 'photo' | 'bulk' | 'barcode' | 'receipt'
@@ -48,6 +50,7 @@ export default function Scan() {
   const router = useRouter()
   const camera = useRef<CameraView>(null)
   const [permission, requestPermission] = useCameraPermissions()
+  const settings = useSettingsStore()
   const [mode, setMode] = useState<Mode>('photo')
   const [facing, setFacing] = useState<CameraType>('back')
   const [busy, setBusy] = useState<string | null>(null)
@@ -137,9 +140,68 @@ export default function Scan() {
     }
   }
 
+  /**
+   * Name the item with the model on the phone.
+   *
+   * Return false when no model is here, so the caller asks the server as it
+   * always did.
+   */
+  const identifyHere = async (): Promise<boolean> => {
+    const model = MODELS.find((entry) => entry.id === settings.localModel)
+    const first = shots[0]
+    if (!model || !first) return false
+    if (!(await statusOf(model)).ready) return false
+
+    setBusy('The phone is looking')
+    try {
+      const run = await recognizeLocally(model, first)
+      const found = run.items[0]
+      if (!found) {
+        Alert.alert(
+          'Nothing recognised',
+          `The model on the phone named nothing after ${Math.round(run.ms / 1000)} s. Add the item by hand.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Add by hand', onPress: () => router.push('/items/add') },
+          ],
+        )
+        return true
+      }
+
+      router.push({
+        pathname: '/items/add',
+        params: {
+          name: found.name,
+          brand: found.brand ?? '',
+          model: found.model ?? '',
+          serial: found.serial_number ?? '',
+          category: found.category ?? '',
+          condition: found.condition ?? '',
+          value: found.estimated_value_aud ?? '',
+          photos: shots.join('|'),
+          took: String(run.ms),
+        },
+      })
+      setShots([])
+      return true
+    } catch (error) {
+      // A failure on the phone is not a dead end: the server may be up.
+      Alert.alert(
+        'The phone could not do it',
+        error instanceof Error ? error.message : 'Asking the server instead.',
+      )
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
   /** Send every picture in the tray to the model. */
   const identify = async (): Promise<void> => {
     if (shots.length === 0) return
+    // The phone first. It holds the photograph already, and it never waits
+    // for a network.
+    if (mode === 'photo' && (await identifyHere())) return
     if (!(await guardOnline())) return
 
     setBusy(
@@ -317,32 +379,35 @@ export default function Scan() {
           </View>
         </View>
 
-        {busy ? (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 130,
-              left: spacing.lg,
-              right: spacing.lg,
-            }}
-          >
-            <Card>
-              <Body weight="600">{busy}</Body>
-              <Caption>The server runs the model on its CPU, so this takes a moment.</Caption>
-            </Card>
-          </View>
-        ) : null}
+        {/*
+          One column holds everything along the bottom: the card that says
+          what is happening, the tray of pictures, and the shutter. The card
+          used to sit at a height of its own and the tray grew up through it.
+        */}
+        <View
+          style={{
+            position: 'absolute',
+            bottom: spacing.lg,
+            left: 0,
+            right: 0,
+            gap: spacing.md,
+          }}
+        >
+          {busy ? (
+            <View style={{ paddingHorizontal: spacing.lg }}>
+              <Card>
+                <Body weight="600">{busy}</Body>
+                <Caption>
+                  {busy.startsWith('The phone')
+                    ? 'The model runs on the phone, so this needs no signal.'
+                    : 'The server runs the model on its CPU, so this takes a moment.'}
+                </Caption>
+              </Card>
+            </View>
+          ) : null}
 
         {mode !== 'barcode' ? (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: spacing.lg,
-              left: 0,
-              right: 0,
-              gap: spacing.md,
-            }}
-          >
+          <View style={{ gap: spacing.md }}>
             {shots.length > 0 ? (
               <ScrollView
                 horizontal
@@ -449,20 +514,14 @@ export default function Scan() {
             ) : null}
           </View>
         ) : (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: spacing.xl,
-              left: spacing.lg,
-              right: spacing.lg,
-            }}
-          >
+          <View style={{ paddingHorizontal: spacing.lg }}>
             <Card>
               <Body weight="600">Point the camera at a barcode</Body>
               <Caption>HomeStock reads it and asks the free product databases.</Caption>
             </Card>
           </View>
         )}
+        </View>
       </View>
     </Screen>
   )

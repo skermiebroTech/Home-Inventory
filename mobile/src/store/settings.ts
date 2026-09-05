@@ -12,18 +12,27 @@ export interface Settings {
   syncOnOpen: boolean
   /** Local reminders for a warranty, a service date, or a lent item. */
   reminders: boolean
+  /**
+   * The vision model that sits on the phone, by id, or null for none.
+   *
+   * With one here the camera names an item without the server, which the
+   * old Xeons in the cupboard take tens of seconds to do.
+   */
+  localModel: string | null
 }
 
 interface SettingsState extends Settings {
   ready: boolean
   restore: () => Promise<void>
   update: (changes: Partial<Settings>) => Promise<void>
+  setLocalModel: (id: string | null) => void
 }
 
 const DEFAULTS: Settings = {
   photosOnWifiOnly: true,
   syncOnOpen: true,
   reminders: true,
+  localModel: null,
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -48,7 +57,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         photosOnWifiOnly: next.photosOnWifiOnly,
         syncOnOpen: next.syncOnOpen,
         reminders: next.reminders,
+        localModel: next.localModel,
       }),
     )
+  },
+
+  setLocalModel: (id) => {
+    void get().update({ localModel: id })
   },
 }))

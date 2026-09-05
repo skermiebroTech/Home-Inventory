@@ -69,7 +69,8 @@
           }
         }
       ],
-      "./plugins/with-release-signing"
+      "./plugins/with-release-signing",
+      "./plugins/with-arm64-only"
     ],
     "experiments": {
       "typedRoutes": true

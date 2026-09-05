@@ -32,6 +32,7 @@
     "expo-sqlite": "~15.1.4",
     "expo-status-bar": "~2.0.0",
     "expo-system-ui": "~4.0.7",
+    "llama.rn": "^0.12.9",
     "react": "18.3.1",
     "react-native": "0.76.9",
     "react-native-gesture-handler": "~2.20.2",

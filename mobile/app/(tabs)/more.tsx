@@ -122,6 +122,16 @@ export default function More() {
             onPress={() => router.push('/cables')}
           />
           <ListRow
+            title="Recognition on the phone"
+            subtitle={
+              settings.localModel
+                ? 'A model is on the phone. The camera uses it.'
+                : 'Off. The camera asks the server.'
+            }
+            icon="hardware-chip"
+            onPress={() => router.push('/local-ai')}
+          />
+          <ListRow
             title="Read an NFC tag"
             subtitle="Hold the phone against a labelled item or box"
             icon="radio"

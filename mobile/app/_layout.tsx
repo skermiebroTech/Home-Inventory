@@ -92,6 +92,10 @@ export default function RootLayout() {
               name="cables"
               options={{ headerShown: true, title: 'Cables' }}
             />
+            <Stack.Screen
+              name="local-ai"
+              options={{ headerShown: true, title: 'On the phone' }}
+            />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>
