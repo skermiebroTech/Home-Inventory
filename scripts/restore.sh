@@ -84,7 +84,12 @@ if [ "$DO_DATABASE" -eq 1 ]; then
   else
     LIBPQ_URL="$(printf '%s' "$DATABASE_URL" | sed 's/+asyncpg//')"
     say "Loading the database"
-    psql --quiet --dbname="$LIBPQ_URL" --file="$WORK/database.sql" || die "psql refused the dump."
+    # ON_ERROR_STOP makes psql fail loudly. Without it, it prints the errors
+    # and still reports success.
+    # The output of the dump goes nowhere, so only the messages of this
+    # script reach the operator. An error still shows, on stderr.
+    psql --quiet --set ON_ERROR_STOP=1 --output=/dev/null --dbname="$LIBPQ_URL" \
+      --file="$WORK/database.sql" || die "psql refused the dump."
     say "The rows are back."
   fi
 fi

@@ -55,8 +55,10 @@ if [ -n "$DATABASE_URL" ]; then
     # which libpq does not know, so it goes away here.
     LIBPQ_URL="$(printf '%s' "$DATABASE_URL" | sed 's/+asyncpg//')"
     say "Reading the database"
-    pg_dump --no-owner --no-privileges --format=plain --dbname="$LIBPQ_URL" \
-      > "$WORK/database.sql" || die "pg_dump failed."
+    # --clean and --if-exists let the dump load into a database that already
+    # holds the tables, which is what a restore always meets.
+    pg_dump --no-owner --no-privileges --clean --if-exists --format=plain \
+      --dbname="$LIBPQ_URL" > "$WORK/database.sql" || die "pg_dump failed."
   else
     say "warning: pg_dump is missing, so the archive holds the files only."
   fi

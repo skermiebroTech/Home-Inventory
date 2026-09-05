@@ -100,7 +100,9 @@ export function useReceipt(id: string | undefined, poll = false) {
     enabled: Boolean(id),
     // The OCR runs after the upload reply. While it runs, the page asks
     // again every three seconds, until the parsed data appears.
-    refetchInterval: poll ? 3000 : false,
+    // A failed request stops the poll, so a signed out tab does not ask
+    // for the same receipt forever.
+    refetchInterval: (query) => (poll && !query.state.error ? 3000 : false),
   })
 }
 

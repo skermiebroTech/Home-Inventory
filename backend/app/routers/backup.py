@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import tempfile
 import zipfile
@@ -15,6 +16,7 @@ import anyio.to_thread
 from fastapi import APIRouter, File, UploadFile, status
 
 from app.config import settings
+from app.database import dispose_engine
 from app.schemas.backup import BackupFile, BackupSchedule, BackupStatus
 from app.schemas.common import Envelope, Message, ok
 from app.services.backup_service import BackupService, get_backup_service
@@ -31,6 +33,12 @@ router = APIRouter(prefix="/api/backup", tags=["Backup"])
 #: A restore archive holds every photograph, so it may be far larger than an
 #: image upload.
 MAX_RESTORE_BYTES = 4 * 1024 * 1024 * 1024
+
+#: How long one statement of the restore may wait for a lock, and how long it
+#: may run. The whole restore has its own ceiling.
+LOCK_TIMEOUT_MS = 30_000
+STATEMENT_TIMEOUT_MS = 600_000
+RESTORE_TIMEOUT_SECONDS = 900
 
 
 def _status(service: BackupService) -> BackupStatus:
@@ -147,6 +155,14 @@ async def restore_backup(
     require_admin(user)
 
     data = await read_upload(file, max_bytes=MAX_RESTORE_BYTES, images_only=False)
+
+    # The dump drops every table before it writes. A drop waits for every
+    # lock on that table, and this request holds one itself, through the
+    # session that read the user. So the session closes, and the pool goes
+    # with it. The next request opens a fresh connection.
+    await session.close()
+    await dispose_engine()
+
     workdir = Path(tempfile.mkdtemp(prefix="homestock-restore-"))
     try:
         archive_path = workdir / "backup.zip"
@@ -223,19 +239,39 @@ def _restore_database(dump: Path) -> str:
             "psql is not installed here, so the rows were not restored. Load "
             f"database.sql by hand: psql -f {dump.name}"
         )
-    result = subprocess.run(
-        [
-            "psql",
-            "--quiet",
-            "--dbname",
-            settings.sync_database_url,
-            "--file",
-            str(dump),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+    # A lock timeout keeps the restore from waiting forever on a connection
+    # that another client left open. The request then fails with a message
+    # instead of hanging.
+    environment = dict(os.environ)
+    environment["PGOPTIONS"] = (
+        f"-c lock_timeout={LOCK_TIMEOUT_MS} "
+        f"-c statement_timeout={STATEMENT_TIMEOUT_MS}"
     )
+    try:
+        result = subprocess.run(
+            [
+                "psql",
+                "--quiet",
+                # Without this, psql prints the errors and still reports success.
+                "--set",
+                "ON_ERROR_STOP=1",
+                "--dbname",
+                settings.sync_database_url,
+                "--file",
+                str(dump),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=RESTORE_TIMEOUT_SECONDS,
+            env=environment,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ApiError(
+            status.HTTP_504_GATEWAY_TIMEOUT,
+            "restore_timeout",
+            "psql did not finish. Stop every other client, then try again.",
+        ) from exc
     if result.returncode != 0:
         logger.error("The restore failed: %s", result.stderr[:500])
         raise ApiError(

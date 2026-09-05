@@ -504,7 +504,16 @@ def _pg_dump_command(database_url: str) -> tuple[list[str], dict[str, str]]:
     from sqlalchemy.engine import make_url
 
     url = make_url(database_url)
-    args = ["pg_dump", "--no-owner", "--no-privileges", "--format=plain"]
+    # --clean and --if-exists let the dump load into a database that already
+    # holds the tables, which is what a restore always meets.
+    args = [
+        "pg_dump",
+        "--no-owner",
+        "--no-privileges",
+        "--clean",
+        "--if-exists",
+        "--format=plain",
+    ]
     if url.host:
         args += ["--host", url.host]
     if url.port:

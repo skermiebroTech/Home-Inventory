@@ -1,0 +1,46 @@
+# The build context is the repository root. Everything that the image does
+# not need stays out, so the build stays fast.
+
+# Dependencies. The image installs its own.
+**/node_modules
+**/.venv
+venv/
+**/__pycache__
+*.py[cod]
+
+# Build output. Stage 1 builds the interface again.
+frontend/dist/
+mobile/.expo/
+mobile/dist/
+
+# The phone application is not part of the image.
+mobile/
+
+# Repository and editor files.
+.git/
+.github/
+.gitignore
+.dockerignore
+**/.DS_Store
+.idea/
+.vscode/
+
+# Caches and test output.
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+htmlcov/
+.coverage*
+
+# Runtime data and secrets. The container reads its settings from the
+# environment, never from a copied file.
+data/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.db
+
+# Documents that the running service does not read.
+docs/screenshots/

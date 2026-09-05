@@ -38,22 +38,27 @@ ENV PYTHONUNBUFFERED=1 \
 # System packages:
 #   tesseract-ocr        reads the text on a receipt. It runs on the CPU.
 #   postgresql-client-16 supplies pg_dump for the backup feature. The version
-#                        must match the server, because pg_dump 15 refuses to
-#                        dump a version 16 server. Debian bookworm ships 15,
-#                        so the PGDG repository is added below.
+#                        must match the server, because an older pg_dump
+#                        refuses to dump a newer server. Debian ships another
+#                        version, so the PGDG repository is added below. The
+#                        codename comes from /etc/os-release, because the base
+#                        image moves from one Debian release to the next.
 #   gosu                 drops from root to the PUID and PGID that Unraid gives.
 #   curl                 runs the container healthcheck.
+#   zip, unzip           the standalone scripts in /app/scripts read and write
+#                        the archive, so they run inside the container too.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates curl gnupg gosu \
+        ca-certificates curl gnupg gosu zip unzip \
         tesseract-ocr tesseract-ocr-eng \
         libjpeg62-turbo zlib1g libfreetype6; \
     install -d /usr/share/postgresql-common/pgdg; \
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc; \
+    . /etc/os-release; \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends postgresql-client-16; \
