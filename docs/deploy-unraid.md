@@ -153,11 +153,17 @@ template and points it at the image that step 4 builds:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/skermiebroTech/Home-Inventory/main/unraid/home-inventory.xml \
-  | sed 's|ghcr.io/skermiebrotech/home-inventory:latest|homestock:latest|' \
   > /boot/config/plugins/dockerMan/templates-user/my-HomeInventory.xml
 ```
 
 The name must start with `my-`, or the Docker tab does not list it.
+
+The template names the image that the CI job publishes,
+`ghcr.io/skermiebrotech/home-inventory:latest`. That is the way to an update
+button: Unraid compares the copy on the server against the copy in the
+registry, and a locally built image has nothing to compare against. Set
+**Network Type** to `homestock` in the form, because the template cannot know
+the name of your network.
 
 To copy the file from your computer instead:
 

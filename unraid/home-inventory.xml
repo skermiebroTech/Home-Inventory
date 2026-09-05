@@ -19,6 +19,10 @@
     Self-hosted home inventory system with AI image recognition, receipt scanning,
     mobile app sync, QR/NFC labels, warranty tracking, and insurance reports.
 
+    PUT THIS CONTAINER ON THE SAME DOCKER NETWORK AS YOUR POSTGRESQL CONTAINER.
+    On the default bridge a container name does not resolve, so the database
+    address must then hold an IP address instead of the container name.
+
     REQUIRES A POSTGRESQL 16 DATABASE. Install the official PostgreSQL 16 container
     from Community Applications first, create a database, then put its connection
     string in the Database URL field below. This container does not run its own
@@ -42,17 +46,17 @@
     Description="The port that the web interface and the API listen on."
     Type="Port" Display="always" Required="true">7850</Config>
 
-  <Config Name="Uploads" Target="/data/uploads" Default="/mnt/user/appdata/home-inventory/uploads"
+  <Config Name="Uploads" Target="/data/uploads" Default="/mnt/user/appdata/homestock/uploads"
     Description="Item photographs and receipt images."
-    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/uploads</Config>
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/homestock/uploads</Config>
 
-  <Config Name="Backups" Target="/data/backups" Default="/mnt/user/appdata/home-inventory/backups"
+  <Config Name="Backups" Target="/data/backups" Default="/mnt/user/appdata/homestock/backups"
     Description="Scheduled backup archives are written here."
-    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/backups</Config>
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/homestock/backups</Config>
 
-  <Config Name="Config" Target="/data/config" Default="/mnt/user/appdata/home-inventory/config"
+  <Config Name="Config" Target="/data/config" Default="/mnt/user/appdata/homestock/config"
     Description="Application settings that the web interface writes."
-    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/home-inventory/config</Config>
+    Mode="rw" Type="Path" Display="always" Required="true">/mnt/user/appdata/homestock/config</Config>
 
   <Config Name="Database URL" Target="HS_DATABASE_URL"
     Default="postgresql+asyncpg://homestock:CHANGE_ME@192.168.1.10:5432/homestock"
