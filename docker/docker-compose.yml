@@ -81,7 +81,10 @@ services:
       # Keep the model in RAM between requests. Loading a model from disk on
       # every call would add more delay than the inference itself.
       OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-30m}"
-      OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-}"
+      # Ollama reads no environment variable for the thread count. It uses
+      # the number of physical cores, which is the right answer on almost
+      # every machine. To change it, write a Modelfile with
+      # "PARAMETER num_thread N" and build a model of your own.
     volumes:
       - ollama-models:/root/.ollama
     # No ports block. Only the app container calls Ollama.
