@@ -72,8 +72,15 @@ jobs:
         working-directory: backend
         env:
           HS_SECRET_KEY: ci-only-secret-key-0123456789abcdef
-          HS_DATABASE_URL: postgresql+asyncpg://homestock:homestock@localhost:5432/homestock
+          HS_DATABASE_URL: postgresql+asyncpg://homestock:homestock@localhost:5432/homestock_check
+          PGPASSWORD: homestock
         run: |
+          # An empty database of its own. The suite leaves tables behind in
+          # homestock_test, and "alembic upgrade head" needs bare ground.
+          psql -h localhost -U homestock -d homestock_test \
+            -c 'DROP DATABASE IF EXISTS homestock_check'
+          psql -h localhost -U homestock -d homestock_test \
+            -c 'CREATE DATABASE homestock_check'
           python -m alembic upgrade head
           python -m alembic check
 
