@@ -12,6 +12,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as FileSystem from 'expo-file-system'
+
+import { api, serverUrl } from '@/api/client'
 import { initLlama, type LlamaContext } from 'llama.rn'
 
 import type { RecognizedItem } from '@/api/types'
@@ -94,6 +96,53 @@ export interface LocalStatus {
 
 function pathOf(model: LocalModel, part: 'model' | 'mmproj'): string {
   return `${HOME}${model.id}-${part}.gguf`
+}
+
+/** One model, as the server describes what it holds. */
+export interface ServerModel {
+  id: string
+  ready: boolean
+  cached_bytes: number
+  bytes: number
+  fetching: boolean
+  files: Array<{ part: string; path: string }>
+}
+
+/**
+ * Ask the server which models it keeps.
+ *
+ * A copy on the server comes down the local network in a minute, where the
+ * public host took an hour. An empty answer is not a failure: the phone then
+ * fetches from the internet as before.
+ */
+export async function serverModels(): Promise<ServerModel[]> {
+  try {
+    return await api.get<ServerModel[]>('/api/models')
+  } catch {
+    return []
+  }
+}
+
+/** Ask the server to keep this model, so every phone downloads it locally. */
+export async function askServerToCache(model: LocalModel): Promise<void> {
+  await api.post(`/api/models/${model.id}/fetch`, {})
+}
+
+/**
+ * Where each file should come from.
+ *
+ * The server wins when it holds the whole model. Anything else and the phone
+ * goes to the public host, because half a file is worse than a slow one.
+ */
+function sourceOf(
+  model: LocalModel,
+  part: 'model' | 'mmproj',
+  onServer: ServerModel | undefined,
+): string {
+  const file = onServer?.ready
+    ? onServer.files.find((one) => one.part === part)
+    : undefined
+  return file ? `${serverUrl()}${file.path}` : model[part].url
 }
 
 async function sizeOf(path: string): Promise<number> {
@@ -198,6 +247,9 @@ export async function download(
   )
   stopped = false
 
+  // The server may hold the same weights on the local network.
+  const onServer = (await serverModels()).find((one) => one.id === model.id)
+
   const parts: Array<'model' | 'mmproj'> = ['model', 'mmproj']
   const total = totalBytes(model)
   const done: Record<string, number> = {}
@@ -254,7 +306,7 @@ export async function download(
 
     let sinceSave = 0
     const running = FileSystem.createDownloadResumable(
-      model[part].url,
+      sourceOf(model, part, onServer),
       target,
       {},
       (progress) => {

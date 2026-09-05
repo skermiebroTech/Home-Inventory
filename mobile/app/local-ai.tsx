@@ -15,14 +15,17 @@ import { Body, Button, Caption, Card, Screen, Title } from '@/components/ui'
 import {
   DownloadCancelled,
   MODELS,
+  askServerToCache,
   cancel,
   download,
   remove,
+  serverModels,
   statusOf,
   totalBytes,
   unfinished,
   type DownloadProgress,
   type LocalModel,
+  type ServerModel,
 } from '@/ai/local'
 import ProgressBar from '@/components/ProgressBar'
 import { formatBytes, formatWait } from '@/lib/format'
@@ -37,6 +40,7 @@ export default function LocalAi() {
   const [busy, setBusy] = useState<string | null>(null)
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [paused, setPaused] = useState<LocalModel | null>(null)
+  const [onServer, setOnServer] = useState<ServerModel[]>([])
 
   const load = useCallback(async () => {
     const state: Record<string, boolean> = {}
@@ -49,6 +53,7 @@ export default function LocalAi() {
     setReady(state)
     setOnDisk(sizes)
     setPaused(await unfinished())
+    setOnServer(await serverModels())
   }, [])
 
   const fetchModel = async (model: LocalModel): Promise<void> => {
@@ -73,6 +78,23 @@ export default function LocalAi() {
     } finally {
       setBusy(null)
       setProgress(null)
+    }
+  }
+
+  const cacheOnServer = async (model: LocalModel): Promise<void> => {
+    try {
+      await askServerToCache(model)
+      await load()
+      Alert.alert(
+        'The server is fetching it',
+        'It downloads once, over its own connection. Every phone in the ' +
+          'house then takes it from the local network in a minute.',
+      )
+    } catch (error) {
+      Alert.alert(
+        'The server would not',
+        error instanceof Error ? error.message : 'It may be away.',
+      )
     }
   }
 
@@ -129,6 +151,7 @@ export default function LocalAi() {
           const here = ready[model.id] ?? false
           const chosen = settings.localModel === model.id
           const working = busy === model.id
+          const held = onServer.find((one) => one.id === model.id)
 
           return (
             <Card key={model.id}>
@@ -142,6 +165,17 @@ export default function LocalAi() {
                     <Caption tone={theme.warn}>
                       {formatBytes(onDisk[model.id] ?? 0)} is already on the
                       phone.
+                    </Caption>
+                  ) : null}
+                  {!ready[model.id] ? (
+                    <Caption tone={held?.ready ? theme.accent : undefined}>
+                      {held?.ready
+                        ? 'Your server holds it. The download stays on your network.'
+                        : held?.fetching
+                          ? `Your server is fetching it: ${formatBytes(
+                              held.cached_bytes,
+                            )} of ${formatBytes(held.bytes)}.`
+                          : 'From the internet. Your server does not hold it.'}
                     </Caption>
                   ) : null}
                 </View>
@@ -228,6 +262,15 @@ export default function LocalAi() {
                           variant="secondary"
                           icon="trash"
                           onPress={() => dropModel(model)}
+                          disabled={busy !== null}
+                        />
+                      ) : null}
+                      {!held?.ready && !held?.fetching ? (
+                        <Button
+                          title="Keep on the server"
+                          variant="secondary"
+                          icon="cloud-upload"
+                          onPress={() => void cacheOnServer(model)}
                           disabled={busy !== null}
                         />
                       ) : null}

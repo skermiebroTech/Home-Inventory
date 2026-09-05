@@ -218,6 +218,17 @@ if os.getenv("HS_SERVE_MEDIA", os.getenv("SERVE_MEDIA", "true")).lower() == "tru
     )
 
 
+# --- The models that a phone runs ---
+#
+# A phone downloads half a gigabyte or more before it can name an item on its
+# own. The server fetches each file once, and hands it out here over the
+# local network. StaticFiles answers a range request, so a phone that loses
+# its connection carries on where it stopped.
+_models = settings.data_dir / "models"
+_models.mkdir(parents=True, exist_ok=True)
+app.mount("/models", StaticFiles(directory=_models), name="models")
+
+
 # --- The built web interface ---
 #
 # The Docker image copies the Vite build into this directory. In development

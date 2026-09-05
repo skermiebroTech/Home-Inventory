@@ -2039,6 +2039,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/models:
+    get:
+      tags:
+      - Phone models
+      summary: List the models that a phone can run.
+      description: A model marked ready is on this server, and a phone downloads it over the local network
+        instead of from the internet.
+      operationId: list_models_api_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_ModelRead__'
+      security:
+      - HTTPBearer: []
+  /api/models/{model_id}/fetch:
+    post:
+      tags:
+      - Phone models
+      summary: Fetch a model onto the server.
+      description: The work runs in the background. Ask this route again, or the list, to see how far
+        it has come. A fetch that stopped carries on.
+      operationId: fetch_model_api_models__model_id__fetch_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 60
+          title: Model Id
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_ModelRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/models/{model_id}:
+    delete:
+      tags:
+      - Phone models
+      summary: Delete a model from the server.
+      operationId: delete_model_api_models__model_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: model_id
+        in: path
+        required: true
+        schema:
+          type: string
+          maxLength: 60
+          title: Model Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/components/{component_id}/photos:
     get:
       tags:
@@ -4379,6 +4456,18 @@ components:
           - type: 'null'
       type: object
       title: Envelope[Message]
+    Envelope_ModelRead_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/ModelRead'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[ModelRead]
     Envelope_NfcLookup_:
       properties:
         data:
@@ -4673,6 +4762,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[list[MaintenanceRead]]
+    Envelope_list_ModelRead__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ModelRead'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[ModelRead]]
     Envelope_list_PhotoRow__:
       properties:
         data:
@@ -6164,6 +6268,73 @@ components:
       - message
       title: Message
       description: A plain acknowledgement, for routes that return no object.
+    ModelFileRead:
+      properties:
+        part:
+          type: string
+          title: Part
+        bytes:
+          type: integer
+          title: Bytes
+        path:
+          type: string
+          title: Path
+        origin:
+          type: string
+          title: Origin
+      type: object
+      required:
+      - part
+      - bytes
+      - path
+      - origin
+      title: ModelFileRead
+      description: One file of a model, and the two places it can come from.
+    ModelRead:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        note:
+          type: string
+          title: Note
+        bytes:
+          type: integer
+          title: Bytes
+        files:
+          items:
+            $ref: '#/components/schemas/ModelFileRead'
+          type: array
+          title: Files
+        ready:
+          type: boolean
+          title: Ready
+        cached_bytes:
+          type: integer
+          title: Cached Bytes
+        fetching:
+          type: boolean
+          title: Fetching
+          default: false
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - id
+      - name
+      - note
+      - bytes
+      - files
+      - ready
+      - cached_bytes
+      title: ModelRead
+      description: One model that a phone can run.
     NfcLookup:
       properties:
         nfc_uid:

@@ -23,6 +23,7 @@ from app.routers import (
     lending,
     locations,
     maintenance,
+    models,
     nfc,
     photos,
     receipts,
@@ -42,6 +43,7 @@ ALL_ROUTERS: list[APIRouter] = [
     locations.router,
     tags.router,
     cables.router,
+    models.router,
     photos.router,  # Owns /api/components/{id}/photos and /api/cables/{id}/photos.
     receipts.router,
     ai.router,
