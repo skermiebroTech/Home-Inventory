@@ -9,6 +9,8 @@
 import * as SQLite from 'expo-sqlite'
 
 import type {
+  CableRow,
+  CableView,
   Component,
   FittedComponent,
   Item,
@@ -165,6 +167,27 @@ CREATE TABLE IF NOT EXISTS spares (
   pending INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS cables (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT,
+  connector_a TEXT,
+  connector_b TEXT,
+  length_cm INTEGER,
+  colour TEXT,
+  brand TEXT,
+  specification TEXT,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  price TEXT,
+  notes TEXT,
+  location_id TEXT,
+  item_id TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT,
+  pending INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_cables_kind ON cables(kind);
+
 -- Every change made while offline waits here.
 CREATE TABLE IF NOT EXISTS outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,7 +225,7 @@ CREATE TABLE IF NOT EXISTS meta (
  * the rows that the server already holds. A change of this number clears the
  * watermark, so the next pull brings everything down one time.
  */
-const SYNC_SCHEMA = '2'
+const SYNC_SCHEMA = '3'
 
 export async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (database) return database
@@ -256,6 +279,7 @@ export async function resetDatabase(): Promise<void> {
     DELETE FROM tags; DELETE FROM item_tags; DELETE FROM receipts;
     DELETE FROM maintenance_logs; DELETE FROM outbox; DELETE FROM photo_queue;
     DELETE FROM components; DELETE FROM item_components; DELETE FROM spares;
+    DELETE FROM cables;
     DELETE FROM meta;
   `)
 }
@@ -601,6 +625,65 @@ export async function listSpares(): Promise<SpareWithComponent[]> {
       left.name.localeCompare(right.name),
   )
   return spares
+}
+
+export async function upsertCables(rows: CableRow[]): Promise<void> {
+  const db = await openDatabase()
+  for (const row of rows) {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO cables
+       (id, name, kind, connector_a, connector_b, length_cm, colour, brand,
+        specification, quantity, price, notes, location_id, item_id, version,
+        updated_at, pending)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      row.id, row.name, row.kind, row.connector_a, row.connector_b,
+      row.length_cm, row.colour, row.brand, row.specification, row.quantity,
+      row.price, row.notes, row.location_id, row.item_id, row.version,
+      row.updated_at,
+    )
+  }
+}
+
+/** Write the length the way a person says it: "80 cm" or "2 m". */
+function lengthLabel(centimetres: number | null): string | null {
+  if (centimetres === null) return null
+  if (centimetres < 100) return `${centimetres} cm`
+  return `${Number((centimetres / 100).toFixed(2))} m`
+}
+
+/**
+ * Every cable, with the place and the device joined in.
+ *
+ * `search` matches the name, the brand, and both ends, because the question
+ * in the shed is always "have I got one with USB-C on it?".
+ */
+export async function listCables(search = ''): Promise<CableView[]> {
+  const db = await openDatabase()
+  const like = `%${search.trim()}%`
+  const rows = await db.getAllAsync<Record<string, unknown>>(
+    `SELECT c.*, l.name AS place, i.name AS device
+       FROM cables c
+       LEFT JOIN locations l ON l.id = c.location_id
+       LEFT JOIN items i ON i.id = c.item_id
+      WHERE ? = ''
+         OR c.name LIKE ? COLLATE NOCASE
+         OR c.brand LIKE ? COLLATE NOCASE
+         OR c.connector_a LIKE ? COLLATE NOCASE
+         OR c.connector_b LIKE ? COLLATE NOCASE
+      ORDER BY c.kind COLLATE NOCASE, c.name COLLATE NOCASE`,
+    search.trim(), like, like, like, like,
+  )
+  return rows.map((row) => {
+    const first = (row.connector_a as string | null) ?? null
+    const second = (row.connector_b as string | null) ?? null
+    return {
+      ...(row as unknown as CableRow),
+      ends: first && second ? `${first} to ${second}` : first ?? second,
+      length_label: lengthLabel((row.length_cm as number | null) ?? null),
+      location_name: (row.place as string | null) ?? null,
+      item_name: (row.device as string | null) ?? null,
+    }
+  })
 }
 
 export async function getSpare(id: string): Promise<SpareRow | null> {

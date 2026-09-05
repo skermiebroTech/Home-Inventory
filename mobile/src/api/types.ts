@@ -237,6 +237,7 @@ export type SyncEntity =
   | 'component'
   | 'item_component'
   | 'spare'
+  | 'cable'
 
 export type SyncOp = 'create' | 'update' | 'delete'
 
@@ -253,6 +254,7 @@ export interface SyncChanges {
   components: Component[]
   item_components: ItemComponentRow[]
   spares: SpareRow[]
+  cables: CableRow[]
   deleted: Partial<Record<SyncEntity, string[]>>
   has_more: boolean
 }
@@ -320,6 +322,36 @@ export interface SpareRow {
   version: number
   created_at: string
   updated_at: string
+}
+
+/** One cable, as the table holds it. */
+export interface CableRow {
+  id: string
+  user_id: string
+  name: string
+  kind: string | null
+  connector_a: string | null
+  connector_b: string | null
+  length_cm: number | null
+  colour: string | null
+  brand: string | null
+  specification: string | null
+  quantity: number
+  price: string | null
+  notes: string | null
+  location_id: string | null
+  item_id: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** A cable with the words that the screen shows. */
+export interface CableView extends CableRow {
+  ends: string | null
+  length_label: string | null
+  location_name: string | null
+  item_name: string | null
 }
 
 /** A fitted component with the catalogue joined in, for the screens. */

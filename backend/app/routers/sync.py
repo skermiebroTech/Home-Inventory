@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from app.models.cable import Cable
 from app.models.component import Component, ComponentSpare, ItemComponent
 from app.models.custom_field import CustomField
 from app.models.item import Item, ItemPhoto
@@ -14,6 +15,7 @@ from app.models.location import Location
 from app.models.maintenance import MaintenanceLog
 from app.models.receipt import Receipt
 from app.models.tag import Tag
+from app.schemas.cable import CableRow
 from app.schemas.common import Envelope, ok
 from app.schemas.component import ComponentRead, ItemComponentRow, SpareRow
 from app.schemas.custom_field import CustomFieldRead
@@ -80,6 +82,7 @@ REGISTRY = SyncRegistry(
             parent=ParentScope(foreign_key="item_id", model=Item),
         ),
         SyncResource(name=SyncEntity.SPARE.value, model=ComponentSpare),
+        SyncResource(name=SyncEntity.CABLE.value, model=Cable),
     ]
 )
 
@@ -99,6 +102,7 @@ READERS: dict[str, Any] = {
     SyncEntity.COMPONENT.value: ComponentRead,
     SyncEntity.ITEM_COMPONENT.value: ItemComponentRow,
     SyncEntity.SPARE.value: SpareRow,
+    SyncEntity.CABLE.value: CableRow,
 }
 
 #: Which field of `SyncChanges` holds which table.
@@ -113,6 +117,7 @@ FIELDS: dict[str, str] = {
     SyncEntity.COMPONENT.value: "components",
     SyncEntity.ITEM_COMPONENT.value: "item_components",
     SyncEntity.SPARE.value: "spares",
+    SyncEntity.CABLE.value: "cables",
 }
 
 

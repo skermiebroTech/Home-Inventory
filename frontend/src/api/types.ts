@@ -494,6 +494,56 @@ export interface Spare {
   is_low: boolean
 }
 
+export interface Cable {
+  id: string
+  user_id: string
+  name: string
+  kind: string | null
+  connector_a: string | null
+  connector_b: string | null
+  length_cm: number | null
+  colour: string | null
+  brand: string | null
+  specification: string | null
+  quantity: number
+  price: string | null
+  notes: string | null
+  location_id: string | null
+  item_id: string | null
+  version: number
+  created_at: string
+  updated_at: string
+  ends: string | null
+  length_label: string | null
+  total_value: string | null
+  location_name: string | null
+  item_name: string | null
+}
+
+export interface CableWrite {
+  name: string
+  kind?: string | null
+  connector_a?: string | null
+  connector_b?: string | null
+  length_cm?: number | null
+  colour?: string | null
+  brand?: string | null
+  specification?: string | null
+  quantity?: number
+  price?: string | null
+  notes?: string | null
+  location_id?: string | null
+  item_id?: string | null
+}
+
+export interface CableQuery {
+  q?: string
+  kind?: string
+  connector?: string
+  location_id?: string
+  item_id?: string
+}
+
 export interface SpareWrite {
   component_id: string
   quantity?: number

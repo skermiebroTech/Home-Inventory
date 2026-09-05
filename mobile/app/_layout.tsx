@@ -88,6 +88,10 @@ export default function RootLayout() {
               name="spares"
               options={{ headerShown: true, title: 'Spares' }}
             />
+            <Stack.Screen
+              name="cables"
+              options={{ headerShown: true, title: 'Cables' }}
+            />
           </Stack>
         </QueryClientProvider>
       </SafeAreaProvider>

@@ -5,6 +5,7 @@ tables whose modules were imported.
 """
 
 from app.models.base import Base, SyncMixin, TimestampMixin, UUIDMixin
+from app.models.cable import Cable
 from app.models.component import Component, ComponentSpare, ItemComponent
 from app.models.custom_field import CustomField
 from app.models.item import (
@@ -23,6 +24,7 @@ __all__ = [
     "ITEM_CONDITIONS",
     "LOCATION_TYPES",
     "Base",
+    "Cable",
     "Component",
     "ComponentSpare",
     "CustomField",

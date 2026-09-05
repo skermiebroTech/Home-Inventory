@@ -1665,6 +1665,208 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/cables:
+    get:
+      tags:
+      - Cables
+      summary: List the cables.
+      description: '``connector`` matches either end, because you look for a cable with USB-C on it and
+        not for a direction.'
+      operationId: list_cables_api_cables_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Match the name, the brand, or the ends.
+          title: Q
+        description: Match the name, the brand, or the ends.
+      - name: kind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+      - name: connector
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Match either end.
+          title: Connector
+        description: Match either end.
+      - name: location_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+      - name: item_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_CableRead__'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Cables
+      summary: Add one cable.
+      operationId: create_cable_api_cables_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CableCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_CableRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/cables/kinds:
+    get:
+      tags:
+      - Cables
+      summary: List the cable families that are in use.
+      operationId: list_kinds_api_cables_kinds_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_list_str__'
+      security:
+      - HTTPBearer: []
+  /api/cables/{cable_id}:
+    get:
+      tags:
+      - Cables
+      summary: Return one cable.
+      operationId: get_cable_api_cables__cable_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: cable_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cable Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_CableRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - Cables
+      summary: Change a cable.
+      operationId: update_cable_api_cables__cable_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: cable_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cable Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CableUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_CableRead_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Cables
+      summary: Delete a cable.
+      operationId: delete_cable_api_cables__cable_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: cable_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Cable Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Envelope_Message_'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/receipts/upload:
     post:
       tags:
@@ -2698,6 +2900,419 @@ components:
       required:
       - file
       title: Body_upload_receipt_api_receipts_upload_post
+    CableCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        kind:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Kind
+          description: 'The family: "USB", "HDMI", "Ethernet", or "Power".'
+        connector_a:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Connector A
+        connector_b:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Connector B
+        length_cm:
+          anyOf:
+          - type: integer
+            maximum: 100000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Length Cm
+          description: The length in centimetres.
+        colour:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Colour
+        brand:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Brand
+        specification:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Specification
+          description: 'What it can do: "USB 3.2, 10 Gbps, 100 W" or "Cat6a".'
+        quantity:
+          type: integer
+          minimum: 0.0
+          title: Quantity
+          default: 1
+        price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+          description: The device that this lead came with.
+      type: object
+      required:
+      - name
+      title: CableCreate
+      description: Add one cable.
+    CableRead:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        name:
+          type: string
+          title: Name
+        kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+        connector_a:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Connector A
+        connector_b:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Connector B
+        length_cm:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Length Cm
+        colour:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Colour
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        specification:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Specification
+        quantity:
+          type: integer
+          title: Quantity
+        price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        ends:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends
+          description: Such as "USB-C to HDMI".
+        length_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Length Label
+          description: Such as "2 m".
+        total_value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Total Value
+          description: The price of one, times the count.
+        location_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Name
+        item_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Item Name
+      type: object
+      required:
+      - id
+      - user_id
+      - name
+      - kind
+      - connector_a
+      - connector_b
+      - length_cm
+      - colour
+      - brand
+      - specification
+      - quantity
+      - price
+      - notes
+      - location_id
+      - item_id
+      - version
+      - created_at
+      - updated_at
+      title: CableRead
+      description: One cable, with the words that the interface shows.
+    CableRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        name:
+          type: string
+          title: Name
+        kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+        connector_a:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Connector A
+        connector_b:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Connector B
+        length_cm:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Length Cm
+        colour:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Colour
+        brand:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Brand
+        specification:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Specification
+        quantity:
+          type: integer
+          title: Quantity
+        price:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+        version:
+          type: integer
+          title: Version
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+      type: object
+      required:
+      - id
+      - user_id
+      - name
+      - kind
+      - connector_a
+      - connector_b
+      - length_cm
+      - colour
+      - brand
+      - specification
+      - quantity
+      - price
+      - notes
+      - location_id
+      - item_id
+      - version
+      - created_at
+      - updated_at
+      title: CableRow
+      description: One cable, exactly as the table holds it. The phone reads this.
+    CableUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 1
+          - type: 'null'
+          title: Name
+        kind:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Kind
+        connector_a:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Connector A
+        connector_b:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Connector B
+        length_cm:
+          anyOf:
+          - type: integer
+            maximum: 100000.0
+            minimum: 0.0
+          - type: 'null'
+          title: Length Cm
+        colour:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Colour
+        brand:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Brand
+        specification:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Specification
+        quantity:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Quantity
+        price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+          - type: 'null'
+          title: Price
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        location_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Location Id
+        item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Item Id
+      type: object
+      title: CableUpdate
+      description: Change a cable. Every field is optional.
     ComponentCreate:
       properties:
         name:
@@ -3138,6 +3753,18 @@ components:
           - type: 'null'
       type: object
       title: Envelope[BarcodeProduct]
+    Envelope_CableRead_:
+      properties:
+        data:
+          anyOf:
+          - $ref: '#/components/schemas/CableRead'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[CableRead]
     Envelope_ComponentDetail_:
       properties:
         data:
@@ -3378,6 +4005,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[UserRead]
+    Envelope_list_CableRead__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/CableRead'
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[CableRead]]
     Envelope_list_ComponentRead__:
       properties:
         data:
@@ -3528,6 +4170,21 @@ components:
           - type: 'null'
       type: object
       title: Envelope[list[TagRead]]
+    Envelope_list_str__:
+      properties:
+        data:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Data
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/ErrorDetail'
+          - type: 'null'
+      type: object
+      title: Envelope[list[str]]
     ErrorDetail:
       properties:
         code:
@@ -5853,6 +6510,11 @@ components:
             $ref: '#/components/schemas/SpareRow'
           type: array
           title: Spares
+        cables:
+          items:
+            $ref: '#/components/schemas/CableRow'
+          type: array
+          title: Cables
         deleted:
           additionalProperties:
             items:
@@ -5921,6 +6583,7 @@ components:
       - component
       - item_component
       - spare
+      - cable
       title: SyncEntity
       description: The tables that the mobile application mirrors.
     SyncError:

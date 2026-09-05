@@ -6,6 +6,7 @@ import { Alert, ScrollView, Switch, View } from 'react-native'
 
 import { Body, Button, Caption, Card, ListRow, Screen, Title } from '@/components/ui'
 import {
+  listCables,
   listItems,
   listLocations,
   listMaintenance,
@@ -34,17 +35,19 @@ export default function More() {
     due: 0,
     spares: 0,
     lowSpares: 0,
+    cables: 0,
   })
 
   useFocusEffect(
     useCallback(() => {
       void (async () => {
-        const [locations, tags, items, logs, spares] = await Promise.all([
+        const [locations, tags, items, logs, spares, cables] = await Promise.all([
           listLocations(),
           listTags(),
           listItems({ limit: 500 }),
           listMaintenance(),
           listSpares(),
+          listCables(),
         ])
         setCounts({
           locations: locations.length,
@@ -53,6 +56,7 @@ export default function More() {
           due: logs.filter((log) => log.next_due_date !== null).length,
           spares: spares.length,
           lowSpares: spares.filter((spare) => spare.is_low).length,
+          cables: cables.reduce((sum, cable) => sum + cable.quantity, 0),
         })
       })()
     }, []),
@@ -110,6 +114,12 @@ export default function More() {
             }
             icon="cube"
             onPress={() => router.push('/spares')}
+          />
+          <ListRow
+            title="Cables"
+            subtitle={plural(counts.cables, 'lead')}
+            icon="git-branch"
+            onPress={() => router.push('/cables')}
           />
           <ListRow
             title="Read an NFC tag"

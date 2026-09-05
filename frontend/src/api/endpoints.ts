@@ -3,6 +3,9 @@
 import { api, download, request } from './client'
 import type {
   AiJob,
+  Cable,
+  CableQuery,
+  CableWrite,
   Component,
   ComponentDetail,
   ComponentWrite,
@@ -220,6 +223,19 @@ export const spares = {
   use: (id: string, count = 1, note?: string) =>
     api.post<Spare>(`/api/spares/${id}/use`, { count, note }),
   remove: (id: string) => api.delete<Message>(`/api/spares/${id}`),
+}
+
+// --- Cables ---
+
+export const cables = {
+  list: (query: CableQuery = {}) =>
+    api.get<Cable[]>('/api/cables', query as Record<string, unknown>),
+  kinds: () => api.get<string[]>('/api/cables/kinds'),
+  get: (id: string) => api.get<Cable>(`/api/cables/${id}`),
+  create: (body: CableWrite) => api.post<Cable>('/api/cables', body),
+  update: (id: string, body: Partial<CableWrite>) =>
+    api.put<Cable>(`/api/cables/${id}`, body),
+  remove: (id: string) => api.delete<Message>(`/api/cables/${id}`),
 }
 
 // --- Health, dashboard, export, and backup ---

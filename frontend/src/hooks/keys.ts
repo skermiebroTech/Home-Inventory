@@ -23,4 +23,6 @@ export const keys = {
   component: (id: string) => ['components', 'one', id] as const,
   itemComponents: (itemId: string) => ['item-components', itemId] as const,
   spares: (query?: Record<string, unknown>) => ['spares', query ?? {}] as const,
+  cables: (query?: Record<string, unknown>) => ['cables', query ?? {}] as const,
+  cableKinds: () => ['cables', 'kinds'] as const,
 }
