@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>HomeInventory</Name>
-  <Repository>ghcr.io/YOUR_USERNAME/home-inventory:latest</Repository>
-  <Registry>https://ghcr.io/YOUR_USERNAME/home-inventory</Registry>
+  <Repository>ghcr.io/skermiebrotech/home-inventory:latest</Repository>
+  <Registry>https://ghcr.io/skermiebrotech/home-inventory</Registry>
   <Branch>
     <Tag>latest</Tag>
     <TagDescription>Latest stable release</TagDescription>
@@ -13,8 +13,8 @@
   </Branch>
   <Network>bridge</Network>
   <Privileged>false</Privileged>
-  <Support>https://github.com/YOUR_USERNAME/home-inventory/issues</Support>
-  <Project>https://github.com/YOUR_USERNAME/home-inventory</Project>
+  <Support>https://github.com/skermiebroTech/Home-Inventory/issues</Support>
+  <Project>https://github.com/skermiebroTech/Home-Inventory</Project>
   <Overview>
     Self-hosted home inventory system with AI image recognition, receipt scanning,
     mobile app sync, QR/NFC labels, warranty tracking, and insurance reports.
@@ -32,7 +32,7 @@
   </Overview>
   <Category>HomeAutomation: Tools:</Category>
   <WebUI>http://[IP]:[PORT:7850]</WebUI>
-  <Icon>https://raw.githubusercontent.com/YOUR_USERNAME/home-inventory/main/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/skermiebroTech/Home-Inventory/main/icon.png</Icon>
   <ExtraParams>--restart=unless-stopped</ExtraParams>
   <PostArgs/>
   <DonateText/>

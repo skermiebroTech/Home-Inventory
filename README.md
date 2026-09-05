@@ -65,6 +65,13 @@ docker compose -f docker/docker-compose.yml up -d app postgres
 
 ## Install on Unraid
 
+[docs/deploy-unraid.md](docs/deploy-unraid.md) holds the whole sequence for
+the Unraid terminal: the directories, the database container, the image build
+from this repository, and the check that it works. Follow that file if you
+want to copy and paste.
+
+The Docker tab does the same job with the template:
+
 1. Open the **Docker** tab, then **Add Container**.
 2. Paste the template URL, or copy [unraid/home-inventory.xml](unraid/home-inventory.xml)
    to `/boot/config/plugins/dockerMan/templates-user/`.
